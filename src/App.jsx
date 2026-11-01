@@ -1570,9 +1570,9 @@ export default function App() {
             {authView === 'login' && (
               <div className="bg-white p-8 sm:p-10 rounded-3xl shadow-xl border border-slate-200 space-y-6">
                 <div className="text-center space-y-2">
-                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center overflow-hidden mx-auto shadow-lg bg-white p-2 border border-slate-100">
-                    <img src={`${import.meta.env.BASE_URL}icons.png`} alt="Logo AURA" className="w-full h-full object-contain" />
-                  </div>
+                  <div className="w-16 h-16 bg-white rounded-2xl shadow-md p-1.5 flex items-center justify-center mx-auto mb-4 border border-slate-100">
+  <img src={`${import.meta.env.BASE_URL}icons.png`} alt="Logo Central AURA" className="w-full h-full object-contain" />
+</div>
                   <h2 className="text-2xl font-black text-slate-800">AURA Estudiantil</h2>
                   <p className="text-sm text-slate-500">Instituto Universitario Jesús Obrero</p>
                 </div>
