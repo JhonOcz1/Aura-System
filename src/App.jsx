@@ -628,7 +628,7 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-3 cursor-pointer" onClick={() => currentUser && setActiveTab('dashboard')}>
             <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden shadow-lg bg-white p-1">
-              <img src="/icons.png" alt="Logo AURA" className="w-full h-full object-contain" />
+              <img src={`${import.meta.env.BASE_URL}icons.png`} alt="Logo AURA" className="w-full h-full object-contain" />
             </div>
             <div>
               <span className="font-extrabold text-base tracking-tight text-white">AURA Estudiantil</span>
@@ -1557,7 +1557,7 @@ export default function App() {
               <div className="bg-white p-8 sm:p-10 rounded-3xl shadow-xl border border-slate-200 space-y-6">
                 <div className="text-center space-y-2">
                   <div className="w-16 h-16 rounded-2xl flex items-center justify-center overflow-hidden mx-auto shadow-lg bg-white p-2 border border-slate-100">
-                    <img src="/icons.png" alt="Logo AURA" className="w-full h-full object-contain" />
+                    <img src={`${import.meta.env.BASE_URL}icons.png`} alt="Logo AURA" className="w-full h-full object-contain" />
                   </div>
                   <h2 className="text-2xl font-black text-slate-800">AURA Estudiantil</h2>
                   <p className="text-sm text-slate-500">Instituto Universitario Jesús Obrero</p>
