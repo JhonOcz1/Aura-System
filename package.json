@@ -17,6 +17,8 @@
     "@supabase/supabase-js": "^2.118.0",
     "@tailwindcss/vite": "^4.3.3",
     "autoprefixer": "^10.6.2",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.9",
     "lucide-react": "^1.62.0",
     "postcss": "^8.5.32",
     "react": "^19.3.1",

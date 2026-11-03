@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  LogOut, User, BookOpen, Settings, AlertCircle, Eye, EyeOff, 
-  Check, Activity, Users, MessageSquareOff, BarChart3, ShieldCheck, 
-  Search, Calendar, Download, Filter, Star, PieChart, Camera, 
-  Palette, Clock, Trash2, ShieldAlert, MessageCircle, CheckCircle, 
-  XCircle, KeyRound, UserPlus, Bell, X, Mail, Lock, ChevronDown, ChevronRight, Save, Edit3 
+import {
+  LogOut, User, BookOpen, Settings, AlertCircle, Eye, EyeOff,
+  Check, Activity, Users, MessageSquareOff, BarChart3, ShieldCheck,
+  Search, Calendar, Download, Filter, Star, PieChart, Camera,
+  Palette, Clock, Trash2, ShieldAlert, MessageCircle, CheckCircle,
+  XCircle, KeyRound, UserPlus, Bell, X, Mail, Lock, ChevronDown, ChevronRight, Save, Edit3, FileText
 } from 'lucide-react';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { supabase } from './supabaseClient';
 
 const INITIAL_USERS = [
@@ -38,12 +40,66 @@ const INITIAL_CAREERS = [
 const INITIAL_SESSIONS = [];
 const INITIAL_REVIEWS = [];
 const INITIAL_AUDITS = [
-  { id: 'aud_1', timestamp: '2026-10-27 10:00:00', user: 'Admin Global', action: 'INICIO DE SESIÓN', details: 'Acceso seguro al panel.' }
+  { id: 'aud_1', timestamp: '27/10/2026 10:00:00 AM', user: 'Admin Global', action: 'INICIO DE SESIÓN', details: 'Acceso seguro al panel.' }
 ];
 const INITIAL_NOTIFICATIONS = [];
 
+// Funciones de fecha y hora en Zona Horaria de Venezuela (America/Caracas, UTC-4)
+const getVenezuelaTimestamp = (date = new Date()) => {
+  const d = new Date(date);
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Caracas',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+  const parts = formatter.formatToParts(d).reduce((acc, part) => {
+    acc[part.type] = part.value;
+    return acc;
+  }, {});
+
+  const day = parts.day;
+  const month = parts.month;
+  const year = parts.year;
+  let hour = parseInt(parts.hour, 10);
+  const minute = parts.minute;
+  const second = parts.second;
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  hour = hour % 12;
+  if (hour === 0) hour = 12;
+  const hourStr = String(hour).padStart(2, '0');
+
+  return `${day}/${month}/${year} ${hourStr}:${minute}:${second} ${ampm}`;
+};
+
+const getVenezuelaDateString = (date = new Date()) => {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Caracas',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+  return formatter.format(date);
+};
+
+const formatAuditTimestamp = (ts) => {
+  if (!ts) return '';
+  if (/^\d{2}\/\d{2}\/\d{4}/.test(ts)) return ts;
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(ts)) {
+    const utcDate = new Date(ts.replace(' ', 'T') + 'Z');
+    if (!isNaN(utcDate.getTime())) {
+      return getVenezuelaTimestamp(utcDate);
+    }
+  }
+  return ts;
+};
+
 const EXTENDED_COLOR_PALETTE = [
-  '#2563eb', '#3b82f6', '#1d4ed8', '#0284c7', '#0ea5e9', 
+  '#2563eb', '#3b82f6', '#1d4ed8', '#0284c7', '#0ea5e9',
   '#059669', '#10b981', '#14b8a6', '#0d9488', '#047857',
   '#7c3aed', '#8b5cf6', '#6d28d9', '#9333ea', '#c084fc',
   '#dc2626', '#ef4444', '#b91c1c', '#f43f5e', '#e11d48',
@@ -98,10 +154,10 @@ function RegisterForm({ users, careers, onRegisterSuccess, onCancel, setRegError
       address: form.address,
       primaryColor: primaryColor || '#2563eb',
       avatar: '',
-      createdAt: new Date().toISOString().split('T')[0],
-      ...(form.role === 'tutor' ? { 
-        subjects: [], 
-        subjectsDetailed: [] 
+      createdAt: getVenezuelaDateString(),
+      ...(form.role === 'tutor' ? {
+        subjects: [],
+        subjectsDetailed: []
       } : {})
     };
 
@@ -229,8 +285,8 @@ const mapUserFromDB = (u) => {
     primaryColor: u.primary_color || u.primaryColor || '#2563eb',
     createdAt: u.created_at || u.createdAt || '',
     subjectsDetailed: detailed,
-    subjects: Array.isArray(u.subjects) && u.subjects.length > 0 
-      ? u.subjects 
+    subjects: Array.isArray(u.subjects) && u.subjects.length > 0
+      ? u.subjects
       : Array.from(new Set(detailed.map(s => s.name)))
   };
 };
@@ -277,7 +333,7 @@ const mapSessionToDB = (s) => ({
 const mapAuditFromDB = (a) => ({
   ...a,
   user: a.user_name || a.user || 'Sistema',
-  timestamp: a.timestamp || '',
+  timestamp: formatAuditTimestamp(a.timestamp || ''),
   action: a.action || '',
   details: a.details || ''
 });
@@ -408,7 +464,7 @@ export default function App() {
         supabase.from('sessions').select('*'),
         supabase.from('careers').select('*'),
         supabase.from('reviews').select('*'),
-        supabase.from('audits').select('*').order('timestamp', { ascending: false }),
+        supabase.from('audits').select('*').order('id', { ascending: false }),
         supabase.from('notifications').select('*').order('created_at', { ascending: false })
       ]);
 
@@ -434,13 +490,13 @@ export default function App() {
               setCurrentUser(null);
               localStorage.removeItem('aura_active_user');
             }
-          } catch (e) {}
+          } catch (e) { }
         }
       }
       if (sessionsData) setSessions(sessionsData.map(mapSessionFromDB));
       if (careersData && careersData.length > 0) setCareers(careersData);
       if (reviewsData) setReviews(reviewsData);
-      if (auditsData) setAudits(auditsData.map(mapAuditFromDB));
+      if (auditsData) setAudits(auditsData.map(mapAuditFromDB).sort((a, b) => (b.id || '').localeCompare(a.id || '')));
       if (notifsData) setNotifications(notifsData.map(mapNotifFromDB));
     } catch (e) {
       console.error('Error al sincronizar con Supabase:', e);
@@ -475,7 +531,7 @@ export default function App() {
     setCurrentUser(updatedUser);
     setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
     localStorage.setItem('aura_active_user', JSON.stringify(updatedUser));
-    
+
     try {
       const { error } = await supabase.from('users').upsert(mapUserToDB(updatedUser));
       if (error) {
@@ -503,7 +559,7 @@ export default function App() {
   const logAudit = async (userName, action, details) => {
     const newAudit = {
       id: `aud_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
-      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      timestamp: getVenezuelaTimestamp(),
       user: userName,
       action,
       details
@@ -641,9 +697,9 @@ export default function App() {
     const updated = {
       ...currentUser,
       role: newRole,
-      ...(newRole === 'tutor' ? { 
-        subjects: currentUser.subjects || [], 
-        subjectsDetailed: currentUser.subjectsDetailed || [] 
+      ...(newRole === 'tutor' ? {
+        subjects: currentUser.subjects || [],
+        subjectsDetailed: currentUser.subjectsDetailed || []
       } : {})
     };
     const ok = await updateUserInDB(updated, `¡Rol actualizado a ${newRole === 'tutor' ? 'Tutor Docente' : 'Estudiante'}!`);
@@ -695,7 +751,7 @@ export default function App() {
       return;
     }
 
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getVenezuelaDateString();
     if (bookingDate < todayStr) {
       showToast('No puedes reservar tutorías para fechas anteriores al día de hoy.', 'danger');
       return;
@@ -817,8 +873,8 @@ export default function App() {
     }
 
     if (notif.type === 'rate_tutor' || (notif.title && notif.title.includes('Califica'))) {
-      const targetSession = sessions.find(s => s.id === notif.sessionId) || 
-                            sessions.find(s => s.studentId === currentUser.id && (s.status === 'completed' || s.status === 'confirmed'));
+      const targetSession = sessions.find(s => s.id === notif.sessionId) ||
+        sessions.find(s => s.studentId === currentUser.id && (s.status === 'completed' || s.status === 'confirmed'));
       if (targetSession) {
         setSessionToRate(targetSession);
       } else {
@@ -894,20 +950,152 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `${filename}_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `${filename}_${getVenezuelaDateString()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     showToast('Reporte exportado con éxito');
   };
 
+  const exportAuditsToPDF = (auditsList, generatedBy = 'Admin Global', brandColor = '#2563eb') => {
+    if (!auditsList || auditsList.length === 0) {
+      showToast('No hay registros de auditoría para exportar', 'danger');
+      return;
+    }
+
+    try {
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+
+      // Franja superior encabezado institucional
+      doc.setFillColor(15, 23, 42); // slate-900
+      doc.rect(0, 0, pageWidth, 28, 'F');
+
+      // Línea de acento dinámico según color primario
+      const hex = (brandColor || '#2563eb').replace('#', '');
+      const num = parseInt(hex, 16);
+      const r = (num >> 16) & 255;
+      const g = (num >> 8) & 255;
+      const b = num & 255;
+      doc.setFillColor(r, g, b);
+      doc.rect(0, 28, pageWidth, 2.5, 'F');
+
+      // Textos del encabezado
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(15);
+      doc.text('AURA ESTUDIANTIL — IUJO', 14, 11);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(203, 213, 225); // slate-300
+      doc.text('Instituto Universitario Jesús Obrero | Supervisión de Seguridad y Auditoría en Vivo', 14, 17);
+      doc.text('Bitácora Oficial de Trazabilidad y Eventos del Sistema', 14, 22);
+
+      // Cuadro de metadatos de emisión
+      doc.setFillColor(248, 250, 252); // slate-50
+      doc.setDrawColor(226, 232, 240); // slate-200
+      doc.roundedRect(14, 34, pageWidth - 28, 20, 2, 2, 'FD');
+
+      doc.setFontSize(8);
+      doc.setTextColor(71, 85, 105); // slate-600
+      doc.setFont('helvetica', 'bold');
+      doc.text('FECHA DE EMISIÓN (HORA VENEZUELA):', 18, 40);
+      doc.text('GENERADO POR:', 18, 45.5);
+      doc.text('TOTAL DE EVENTOS AUDITADOS:', 18, 51);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(15, 23, 42); // slate-900
+      const emissionDate = getVenezuelaTimestamp();
+      doc.text(emissionDate, 82, 40);
+      doc.text(generatedBy, 82, 45.5);
+      doc.text(`${auditsList.length} registro(s)`, 82, 51);
+
+      // Placa de documento oficial
+      doc.setFillColor(236, 253, 245); // emerald-50
+      doc.setDrawColor(167, 243, 208);
+      doc.roundedRect(pageWidth - 58, 39, 42, 10, 1.5, 1.5, 'FD');
+      doc.setTextColor(6, 95, 70); // emerald-800
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.text('DOCUMENTO OFICIAL', pageWidth - 37, 45.5, { align: 'center' });
+
+      // Columnas solicitadas: Fecha y Hora, Usuario, Acción Registrada, Detalles de Seguridad
+      const tableHead = [['Fecha y Hora', 'Usuario', 'Acción Registrada', 'Detalles de Seguridad']];
+      const tableBody = auditsList.map(a => [
+        a.timestamp || '',
+        a.user || a.user_name || 'Sistema',
+        a.action || '',
+        a.details || ''
+      ]);
+
+      autoTable(doc, {
+        startY: 58,
+        head: tableHead,
+        body: tableBody,
+        theme: 'grid',
+        styles: {
+          font: 'helvetica',
+          fontSize: 7.5,
+          cellPadding: 2.8,
+          textColor: [30, 41, 59],
+          lineColor: [226, 232, 240],
+          lineWidth: 0.15,
+          overflow: 'linebreak'
+        },
+        headStyles: {
+          fillColor: [r, g, b],
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+          fontSize: 8,
+          halign: 'left',
+          cellPadding: 3
+        },
+        alternateRowStyles: {
+          fillColor: [248, 250, 252]
+        },
+        columnStyles: {
+          0: { cellWidth: 42, fontStyle: 'bold' },
+          1: { cellWidth: 36 },
+          2: { cellWidth: 38, fontStyle: 'bold' },
+          3: { cellWidth: 'auto' }
+        },
+        margin: { left: 14, right: 14, bottom: 18 }
+      });
+
+      // Pie de página con numeración total
+      const totalPages = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setFontSize(7.5);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(148, 163, 184); // slate-400
+        doc.text('Instituto Universitario Jesús Obrero (IUJO) • Confidencial', 14, pageHeight - 8);
+        doc.text(`Página ${i} de ${totalPages}`, pageWidth - 14, pageHeight - 8, { align: 'right' });
+      }
+
+      const fileDate = getVenezuelaDateString();
+      doc.save(`auditoria_seguridad_iujo_${fileDate}.pdf`);
+      showToast('Bitácora descargada en PDF exitosamente', 'success');
+    } catch (err) {
+      console.error('Error generando PDF de auditoría:', err);
+      showToast('Error al generar el archivo PDF', 'danger');
+    }
+  };
+
   // PALETA DINÁMICA DE COLOR DE TODA LA PÁGINA
   const primaryColor = currentUser?.primaryColor || '#2563eb';
-  const todayDateFormatted = new Date().toISOString().split('T')[0];
+  const todayDateFormatted = getVenezuelaDateString();
   const userNotifications = notifications.filter(n => n.userId === currentUser?.id);
   const unreadNotifCount = userNotifications.filter(n => !n.read).length;
 
-  const filteredAudits = audits.filter(a => 
+  const filteredAudits = audits.filter(a =>
     (a.timestamp || '').toLowerCase().includes(auditFilterQuery.toLowerCase().trim()) ||
     (a.user || a.user_name || '').toLowerCase().includes(auditFilterQuery.toLowerCase().trim()) ||
     (a.action || '').toLowerCase().includes(auditFilterQuery.toLowerCase().trim())
@@ -935,61 +1123,61 @@ export default function App() {
 
       {/* HEADER DINÁMICO */}
       <header className="text-white border-b border-black/10 sticky top-0 z-40 shadow-md transition-colors duration-300" style={{ backgroundColor: primaryColor }}>
-  <div className="max-w-7xl mx-auto px-2 sm:px-4 min-h-16 py-2 flex items-center justify-between gap-1">
-    
-    {/* SECCIÓN DEL LOGO Y TÍTULO */}
-    <div className="flex items-center space-x-2 cursor-pointer min-w-0 flex-grow" onClick={() => currentUser && setActiveTab('dashboard')}>
-      <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center overflow-hidden shadow-lg bg-white p-1 shrink-0">
-        <img src={`${import.meta.env.BASE_URL}icons.png`} alt="Logo AURA" className="w-full h-full object-contain" />
-      </div>
-      <div className="flex flex-col min-w-0">
-        <span className="font-extrabold text-xs sm:text-base tracking-tight text-white leading-tight truncate">
-          AURA Estudiantil
-        </span>
-        <span className="text-[9px] sm:text-xs text-white/85 font-medium leading-tight hidden sm:block truncate">
-          Instituto Universitario Jesús Obrero
-        </span>
-        {/* Sigla ajustada a IUJO para celulares */}
-        <span className="text-[9px] text-white/80 font-medium leading-tight sm:hidden truncate">
-          IUJO
-        </span>
-      </div>
-    </div>
+        <div className="max-w-7xl mx-auto px-2 sm:px-4 min-h-16 py-2 flex items-center justify-between gap-1">
 
-    {/* SECCIÓN DE BOTONES DE USUARIO */}
-    {currentUser && (
-      <div className="flex items-center space-x-1 sm:space-x-3 shrink-0">
-        {currentUser.role !== 'admin' && (
-          <button onClick={() => setShowNotificationsModal(true)} className="relative p-1.5 sm:p-2 text-white/90 hover:text-white hover:bg-white/10 rounded-lg transition" title="Notificaciones">
-            <Bell className="w-4.5 h-4.5 sm:w-5 sm:h-5 shrink-0" />
-            {unreadNotifCount > 0 && (
-              <span className="absolute top-0.5 right-0.5 w-3.5 h-3.5 bg-red-500 text-white rounded-full text-[9px] font-bold flex items-center justify-center shadow-sm">
-                {unreadNotifCount}
+          {/* SECCIÓN DEL LOGO Y TÍTULO */}
+          <div className="flex items-center space-x-2 cursor-pointer min-w-0 flex-grow" onClick={() => currentUser && setActiveTab('dashboard')}>
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center overflow-hidden shadow-lg bg-white p-1 shrink-0">
+              <img src={`${import.meta.env.BASE_URL}icons.png`} alt="Logo AURA" className="w-full h-full object-contain" />
+            </div>
+            <div className="flex flex-col min-w-0">
+              <span className="font-extrabold text-xs sm:text-base tracking-tight text-white leading-tight truncate">
+                AURA Estudiantil
               </span>
-            )}
-          </button>
-        )}
+              <span className="text-[9px] sm:text-xs text-white/85 font-medium leading-tight hidden sm:block truncate">
+                Instituto Universitario Jesús Obrero
+              </span>
+              {/* Sigla ajustada a IUJO para celulares */}
+              <span className="text-[9px] text-white/80 font-medium leading-tight sm:hidden truncate">
+                IUJO
+              </span>
+            </div>
+          </div>
 
-        {currentUser.role !== 'admin' && (
-          <button onClick={() => setActiveTab('profile')} className={`flex items-center space-x-1.5 px-2 sm:px-4 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition ${activeTab === 'profile' ? 'bg-white/25 text-white' : 'text-white/90 hover:bg-white/10'}`}>
-            {currentUser.avatar ? (
-              <img src={currentUser.avatar} alt="Avatar" className="w-5 h-5 sm:w-6 sm:h-6 rounded-full object-cover border border-white shrink-0" />
-            ) : (
-              <User className="w-4.5 h-4.5 shrink-0" />
-            )}
-            <span className="hidden sm:inline whitespace-nowrap">Mi Perfil</span>
-          </button>
-        )}
+          {/* SECCIÓN DE BOTONES DE USUARIO */}
+          {currentUser && (
+            <div className="flex items-center space-x-1 sm:space-x-3 shrink-0">
+              {currentUser.role !== 'admin' && (
+                <button onClick={() => setShowNotificationsModal(true)} className="relative p-1.5 sm:p-2 text-white/90 hover:text-white hover:bg-white/10 rounded-lg transition" title="Notificaciones">
+                  <Bell className="w-4.5 h-4.5 sm:w-5 sm:h-5 shrink-0" />
+                  {unreadNotifCount > 0 && (
+                    <span className="absolute top-0.5 right-0.5 w-3.5 h-3.5 bg-red-500 text-white rounded-full text-[9px] font-bold flex items-center justify-center shadow-sm">
+                      {unreadNotifCount}
+                    </span>
+                  )}
+                </button>
+              )}
 
-        <button onClick={handleLogout} className="p-1.5 sm:p-2 text-white/90 hover:text-red-200 hover:bg-white/10 rounded-lg transition flex items-center" title="Salir">
-          <LogOut className="w-4.5 h-4.5 sm:w-5 sm:h-5 shrink-0" />
-          <span className="text-sm font-semibold hidden md:inline ml-1 whitespace-nowrap">Salir</span>
-        </button>
-      </div>
-    )}
+              {currentUser.role !== 'admin' && (
+                <button onClick={() => setActiveTab('profile')} className={`flex items-center space-x-1.5 px-2 sm:px-4 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition ${activeTab === 'profile' ? 'bg-white/25 text-white' : 'text-white/90 hover:bg-white/10'}`}>
+                  {currentUser.avatar ? (
+                    <img src={currentUser.avatar} alt="Avatar" className="w-5 h-5 sm:w-6 sm:h-6 rounded-full object-cover border border-white shrink-0" />
+                  ) : (
+                    <User className="w-4.5 h-4.5 shrink-0" />
+                  )}
+                  <span className="hidden sm:inline whitespace-nowrap">Mi Perfil</span>
+                </button>
+              )}
 
-  </div>
-</header>
+              <button onClick={handleLogout} className="p-1.5 sm:p-2 text-white/90 hover:text-red-200 hover:bg-white/10 rounded-lg transition flex items-center" title="Salir">
+                <LogOut className="w-4.5 h-4.5 sm:w-5 sm:h-5 shrink-0" />
+                <span className="text-sm font-semibold hidden md:inline ml-1 whitespace-nowrap">Salir</span>
+              </button>
+            </div>
+          )}
+
+        </div>
+      </header>
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
         {currentUser ? (
           <div>
@@ -1067,7 +1255,7 @@ export default function App() {
                       {users.map(u => (
                         <tr key={u.id}>
                           <td className="p-3.5 font-semibold text-slate-900">{u.name}<span className="block text-xs text-slate-500">{u.email}</span></td>
-                          
+
                           <td className="p-3.5">
                             {u.role === 'admin' ? (
                               <span className="text-slate-400 italic">No aplica</span>
@@ -1156,7 +1344,7 @@ export default function App() {
                     <button onClick={() => { setFilterCareer(''); setFilterSubject(''); setFilterTutorText(''); }} className="text-slate-600 hover:text-slate-900 font-bold underline">Limpiar filtros</button>
                   </div>
                 )}
-                
+
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   <div className="lg:col-span-2 bg-white p-6 rounded-3xl border shadow-sm space-y-4">
                     <h3 className="font-bold text-lg text-slate-800">Carreras y Materias Registradas</h3>
@@ -1349,7 +1537,7 @@ export default function App() {
                     <Download className="w-4.5 h-4.5" /> <span>Exportar Métricas CSV</span>
                   </button>
                 </div>
-                
+
                 {/* 3 CONTADORES PRINCIPALES */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                   <div className="bg-white p-6 rounded-3xl border shadow-sm space-y-2">
@@ -1411,7 +1599,7 @@ export default function App() {
                     {/* Leyenda y datos detallados */}
                     <div className="space-y-4">
                       <p className="text-sm text-slate-600">Proporción actual entre estudiantes registrados y tutores docentes activos en la plataforma.</p>
-                      
+
                       <div className="space-y-3">
                         <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between">
                           <div className="flex items-center space-x-3">
@@ -1479,24 +1667,17 @@ export default function App() {
                       </h2>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <button onClick={() => exportDataToCSV('auditoria_seguridad', audits)} className="px-3.5 py-2 bg-slate-100 text-slate-700 font-bold text-sm rounded-xl flex items-center space-x-1.5 hover:bg-slate-200 transition">
-                        <Download className="w-4.5 h-4.5" /> 
-                        <span>Exportar Bitácora CSV</span>
-                      </button>
-                      <button onClick={async () => { 
-                        setAudits([]); 
-                        try {
-                          await supabase.from('audits').delete().neq('id', '0');
-                          showToast('Bitácora de auditoría limpia', 'success');
-                        } catch (e) {
-                          console.error(e);
-                        }
-                      }} className="text-sm font-bold px-3.5 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-700">
-                        Limpiar Bitácora
+                      <button
+                        onClick={() => exportAuditsToPDF(filteredAudits, currentUser?.name || 'Admin Global', primaryColor)}
+                        className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-sm rounded-xl flex items-center space-x-2 shadow-sm transition"
+                        title="Descargar bitácora de auditoría en formato PDF"
+                      >
+                        <FileText className="w-4.5 h-4.5" />
+                        <span>Descargar en PDF</span>
                       </button>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-center space-x-2.5 bg-slate-50 p-3.5 rounded-2xl border">
                     <Filter className="w-4.5 h-4.5 text-slate-500 shrink-0" />
                     <input type="text" placeholder="Filtrar por fecha, hora, usuario o acción..." value={auditFilterQuery} onChange={(e) => setAuditFilterQuery(e.target.value)} className="w-full bg-transparent text-sm font-medium focus:outline-none text-slate-800" />
@@ -1578,22 +1759,22 @@ export default function App() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                       <div>
                         <label className="block text-xs font-black uppercase text-slate-600 mb-2 tracking-wide">Nombre Completo</label>
-                        <input 
-                          type="text" 
-                          required 
-                          value={profileEditForm.name} 
-                          onChange={(e) => setProfileEditForm({ ...profileEditForm, name: e.target.value })} 
-                          className="w-full p-3.5 border-2 rounded-2xl text-sm font-medium outline-none transition" 
+                        <input
+                          type="text"
+                          required
+                          value={profileEditForm.name}
+                          onChange={(e) => setProfileEditForm({ ...profileEditForm, name: e.target.value })}
+                          className="w-full p-3.5 border-2 rounded-2xl text-sm font-medium outline-none transition"
                         />
                       </div>
                       <div>
                         <label className="block text-xs font-black uppercase text-slate-600 mb-2 tracking-wide">Correo Electrónico</label>
-                        <input 
-                          type="email" 
-                          required 
-                          value={profileEditForm.email} 
-                          onChange={(e) => setProfileEditForm({ ...profileEditForm, email: e.target.value })} 
-                          className="w-full p-3.5 border-2 rounded-2xl text-sm font-medium outline-none transition" 
+                        <input
+                          type="email"
+                          required
+                          value={profileEditForm.email}
+                          onChange={(e) => setProfileEditForm({ ...profileEditForm, email: e.target.value })}
+                          className="w-full p-3.5 border-2 rounded-2xl text-sm font-medium outline-none transition"
                         />
                       </div>
                     </div>
@@ -1601,20 +1782,20 @@ export default function App() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                       <div>
                         <label className="block text-xs font-black uppercase text-slate-600 mb-2 tracking-wide">Cédula de Identidad</label>
-                        <input 
-                          type="text" 
-                          value={profileEditForm.cedula} 
-                          onChange={(e) => setProfileEditForm({ ...profileEditForm, cedula: e.target.value })} 
-                          className="w-full p-3.5 border-2 rounded-2xl text-sm font-medium outline-none transition" 
+                        <input
+                          type="text"
+                          value={profileEditForm.cedula}
+                          onChange={(e) => setProfileEditForm({ ...profileEditForm, cedula: e.target.value })}
+                          className="w-full p-3.5 border-2 rounded-2xl text-sm font-medium outline-none transition"
                         />
                       </div>
                       <div>
                         <label className="block text-xs font-black uppercase text-slate-600 mb-2 tracking-wide">Teléfono de Contacto</label>
-                        <input 
-                          type="text" 
-                          value={profileEditForm.phone} 
-                          onChange={(e) => setProfileEditForm({ ...profileEditForm, phone: e.target.value })} 
-                          className="w-full p-3.5 border-2 rounded-2xl text-sm font-medium outline-none transition" 
+                        <input
+                          type="text"
+                          value={profileEditForm.phone}
+                          onChange={(e) => setProfileEditForm({ ...profileEditForm, phone: e.target.value })}
+                          className="w-full p-3.5 border-2 rounded-2xl text-sm font-medium outline-none transition"
                         />
                       </div>
                     </div>
@@ -1622,9 +1803,9 @@ export default function App() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                       <div>
                         <label className="block text-xs font-black uppercase text-slate-600 mb-2 tracking-wide">Carrera Académica</label>
-                        <select 
-                          value={profileEditForm.career} 
-                          onChange={(e) => setProfileEditForm({ ...profileEditForm, career: e.target.value })} 
+                        <select
+                          value={profileEditForm.career}
+                          onChange={(e) => setProfileEditForm({ ...profileEditForm, career: e.target.value })}
                           className="w-full p-3.5 border-2 rounded-2xl text-sm font-bold bg-white outline-none transition"
                         >
                           {careers.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
@@ -1632,18 +1813,18 @@ export default function App() {
                       </div>
                       <div>
                         <label className="block text-xs font-black uppercase text-slate-600 mb-2 tracking-wide">Dirección de Habitabilidad</label>
-                        <input 
-                          type="text" 
-                          value={profileEditForm.address} 
-                          onChange={(e) => setProfileEditForm({ ...profileEditForm, address: e.target.value })} 
-                          className="w-full p-3.5 border-2 rounded-2xl text-sm font-medium outline-none transition" 
+                        <input
+                          type="text"
+                          value={profileEditForm.address}
+                          onChange={(e) => setProfileEditForm({ ...profileEditForm, address: e.target.value })}
+                          className="w-full p-3.5 border-2 rounded-2xl text-sm font-medium outline-none transition"
                         />
                       </div>
                     </div>
 
                     <div className="pt-3">
-                      <button 
-                        type="submit" 
+                      <button
+                        type="submit"
                         className="text-white font-black px-7 py-3.5 rounded-2xl text-sm shadow-lg transition flex items-center justify-center space-x-2 hover:opacity-90"
                         style={{ backgroundColor: primaryColor }}
                       >
@@ -1673,11 +1854,11 @@ export default function App() {
                       <span className="text-xs font-extrabold uppercase tracking-wider text-slate-500 block mb-3">Elige un color de la paleta completa:</span>
                       <div className="grid grid-cols-7 sm:grid-cols-12 gap-3">
                         {EXTENDED_COLOR_PALETTE.map((hex) => (
-                          <button 
-                            key={hex} 
-                            onClick={() => updateUserInDB({ ...currentUser, primaryColor: hex }, 'Color del sistema actualizado')} 
-                            className={`w-10 h-10 rounded-2xl border-2 transition hover:scale-110 shadow-sm ${primaryColor === hex ? 'ring-2 ring-offset-2 ring-slate-900 scale-110' : 'border-white'}`} 
-                            style={{ backgroundColor: hex }} 
+                          <button
+                            key={hex}
+                            onClick={() => updateUserInDB({ ...currentUser, primaryColor: hex }, 'Color del sistema actualizado')}
+                            className={`w-10 h-10 rounded-2xl border-2 transition hover:scale-110 shadow-sm ${primaryColor === hex ? 'ring-2 ring-offset-2 ring-slate-900 scale-110' : 'border-white'}`}
+                            style={{ backgroundColor: hex }}
                             title={hex}
                           />
                         ))}
@@ -1692,7 +1873,7 @@ export default function App() {
                       <BookOpen className="w-6 h-6" style={{ color: primaryColor }} />
                       <h3 className="font-bold text-lg text-slate-900">Materias que Imparto</h3>
                     </div>
-                    
+
                     <div className="bg-slate-50 p-5 rounded-2xl border space-y-4">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                         <div>
@@ -1722,7 +1903,7 @@ export default function App() {
                           <label className="block text-xs font-bold uppercase text-slate-600 mb-1.5">Hora</label>
                           <div className="flex items-center space-x-1.5">
                             <select value={newSubjectHour} onChange={(e) => setNewSubjectHour(e.target.value)} className="w-1/2 p-3 border rounded-xl text-sm bg-white font-bold">
-                              {['01','02','03','04','05','06','07','08','09','10','11','12'].map(h => <option key={h} value={h}>{h}</option>)}
+                              {['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'].map(h => <option key={h} value={h}>{h}</option>)}
                             </select>
                             <span>:</span>
                             <select value={newSubjectMinute} onChange={(e) => setNewSubjectMinute(e.target.value)} className="w-1/2 p-3 border rounded-xl text-sm bg-white font-bold">
@@ -1928,8 +2109,8 @@ export default function App() {
               <div className="bg-white p-8 sm:p-10 rounded-3xl shadow-xl border border-slate-200 space-y-6">
                 <div className="text-center space-y-2">
                   <div className="w-16 h-16 bg-white rounded-2xl shadow-md p-1.5 flex items-center justify-center mx-auto mb-4 border border-slate-100">
-  <img src={`${import.meta.env.BASE_URL}icons.png`} alt="Logo Central AURA" className="w-full h-full object-contain" />
-</div>
+                    <img src={`${import.meta.env.BASE_URL}icons.png`} alt="Logo Central AURA" className="w-full h-full object-contain" />
+                  </div>
                   <h2 className="text-2xl font-black text-slate-800">AURA Estudiantil</h2>
                   <p className="text-sm text-slate-500">Instituto Universitario Jesús Obrero</p>
                 </div>
