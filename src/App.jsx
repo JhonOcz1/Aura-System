@@ -379,8 +379,8 @@ export default function App() {
   const [filterReviewRating, setFilterReviewRating] = useState('');
   const [viewingTutorProfile, setViewingTutorProfile] = useState(null);
 
-  // Cargar datos desde Supabase al iniciar
-  const loadDataFromSupabase = async () => {
+  // Cargar datos desde Supabase
+  const loadDataFromSupabase = async (isInitial = false) => {
     try {
       const [
         { data: usersData },
@@ -401,14 +401,16 @@ export default function App() {
       if (usersData && usersData.length > 0) {
         const mappedUsers = usersData.map(mapUserFromDB);
         setUsers(mappedUsers);
-        // Sincronizar el usuario logueado con sus datos más recientes
-        const savedActive = localStorage.getItem('aura_active_user');
-        if (savedActive) {
-          try {
-            const activeObj = JSON.parse(savedActive);
-            const fresh = mappedUsers.find(u => u.id === activeObj.id);
-            if (fresh) setCurrentUser(fresh);
-          } catch (e) {}
+        // Sincronizar únicamente en la carga inicial si hay una sesión guardada
+        if (isInitial) {
+          const savedActive = localStorage.getItem('aura_active_user');
+          if (savedActive) {
+            try {
+              const activeObj = JSON.parse(savedActive);
+              const fresh = mappedUsers.find(u => u.id === activeObj.id);
+              if (fresh) setCurrentUser(fresh);
+            } catch (e) {}
+          }
         }
       }
       if (sessionsData) setSessions(sessionsData.map(mapSessionFromDB));
@@ -422,12 +424,12 @@ export default function App() {
   };
 
   useEffect(() => {
-    loadDataFromSupabase();
+    loadDataFromSupabase(true);
 
     // Escuchar cambios en tiempo real desde Supabase para sincronizar entre diferentes dispositivos
     const channel = supabase.channel('aura_db_changes')
       .on('postgres_changes', { event: '*', schema: 'public' }, () => {
-        loadDataFromSupabase();
+        loadDataFromSupabase(false);
       })
       .subscribe();
 
@@ -436,12 +438,17 @@ export default function App() {
     };
   }, []);
 
+  // Función dedicada para actualizar datos del usuario sin causar bucles infinitos
+  const updateUserInDB = (updatedUser) => {
+    setCurrentUser(updatedUser);
+    setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+    localStorage.setItem('aura_active_user', JSON.stringify(updatedUser));
+    supabase.from('users').upsert(mapUserToDB(updatedUser)).catch(e => console.error('Error guardando usuario:', e));
+  };
+
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem('aura_active_user', JSON.stringify(currentUser));
-      setUsers(prevUsers => prevUsers.map(u => u.id === currentUser.id ? currentUser : u));
-      // Guardar cambios del perfil / materias / color en Supabase
-      supabase.from('users').upsert(mapUserToDB(currentUser)).catch(err => console.error('Error guardando usuario en Supabase:', err));
     } else {
       localStorage.removeItem('aura_active_user');
     }
@@ -568,7 +575,7 @@ export default function App() {
         subjectsDetailed: currentUser.subjectsDetailed || [] 
       } : {})
     };
-    setCurrentUser(updated);
+    updateUserInDB(updated);
     logAudit(updated.name, 'CAMBIO DE ROL', `Usuario cambió su rol a ${newRole}`);
     showToast(`¡Rol actualizado a ${newRole === 'tutor' ? 'Tutor Docente' : 'Estudiante'}!`);
   };
@@ -588,7 +595,7 @@ export default function App() {
       career: profileEditForm.career
     };
 
-    setCurrentUser(updated);
+    updateUserInDB(updated);
     logAudit(updated.name, 'ACTUALIZACIÓN DE PERFIL', 'Se modificaron los datos personales de la cuenta');
     showToast('¡Datos personales actualizados correctamente!');
   };
@@ -599,7 +606,7 @@ export default function App() {
       const reader = new FileReader();
       reader.onloadend = () => {
         const updated = { ...currentUser, avatar: reader.result };
-        setCurrentUser(updated);
+        updateUserInDB(updated);
         logAudit(currentUser.name, 'ACTUALIZACIÓN DE FOTO', 'Se cargó una nueva imagen de perfil');
         showToast('Foto de perfil actualizada con éxito');
       };
@@ -1528,7 +1535,7 @@ export default function App() {
                         {EXTENDED_COLOR_PALETTE.map((hex) => (
                           <button 
                             key={hex} 
-                            onClick={() => setCurrentUser({ ...currentUser, primaryColor: hex })} 
+                            onClick={() => updateUserInDB({ ...currentUser, primaryColor: hex })} 
                             className={`w-10 h-10 rounded-2xl border-2 transition hover:scale-110 shadow-sm ${primaryColor === hex ? 'ring-2 ring-offset-2 ring-slate-900 scale-110' : 'border-white'}`} 
                             style={{ backgroundColor: hex }} 
                             title={hex}
@@ -1606,7 +1613,7 @@ export default function App() {
                         const updatedDetailed = [...currentDetailed, newSubItem];
                         const updatedSubjectsNames = Array.from(new Set(updatedDetailed.map(i => i.name)));
 
-                        setCurrentUser({ ...currentUser, subjects: updatedSubjectsNames, subjectsDetailed: updatedDetailed });
+                        updateUserInDB({ ...currentUser, subjects: updatedSubjectsNames, subjectsDetailed: updatedDetailed });
                         setNewSubjectName('');
                         logAudit(currentUser.name, 'MATERIA REGISTRADA', `Registró ${newSubjectName.trim()}`);
                         showToast('¡Materia registrada con éxito!');
@@ -1632,7 +1639,7 @@ export default function App() {
                               <button onClick={() => {
                                 const updatedDetailed = currentUser.subjectsDetailed.filter(x => x.id !== item.id);
                                 const updatedSubjectsNames = Array.from(new Set(updatedDetailed.map(x => x.name)));
-                                setCurrentUser({ ...currentUser, subjects: updatedSubjectsNames, subjectsDetailed: updatedDetailed });
+                                updateUserInDB({ ...currentUser, subjects: updatedSubjectsNames, subjectsDetailed: updatedDetailed });
                                 logAudit(currentUser.name, 'MATERIA ELIMINADA', `Eliminó ${item.name}`);
                                 showToast('Materia eliminada', 'danger');
                               }} className="text-slate-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-xl transition">
