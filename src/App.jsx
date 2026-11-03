@@ -292,16 +292,68 @@ export default function App() {
   const [filterReviewRating, setFilterReviewRating] = useState('');
   const [viewingTutorProfile, setViewingTutorProfile] = useState(null);
 
-  useEffect(() => { localStorage.setItem('aura_users', JSON.stringify(users)); }, [users]);
-  useEffect(() => { localStorage.setItem('aura_sessions', JSON.stringify(sessions)); }, [sessions]);
-  useEffect(() => { localStorage.setItem('aura_careers', JSON.stringify(careers)); }, [careers]);
-  useEffect(() => { localStorage.setItem('aura_reviews', JSON.stringify(reviews)); }, [reviews]);
-  useEffect(() => { localStorage.setItem('aura_audits', JSON.stringify(audits)); }, [audits]);
-  useEffect(() => { localStorage.setItem('aura_notifications', JSON.stringify(notifications)); }, [notifications]);
+  // Cargar datos desde Supabase al iniciar
+  const loadDataFromSupabase = async () => {
+    try {
+      const [
+        { data: usersData },
+        { data: sessionsData },
+        { data: careersData },
+        { data: reviewsData },
+        { data: auditsData },
+        { data: notifsData }
+      ] = await Promise.all([
+        supabase.from('users').select('*'),
+        supabase.from('sessions').select('*'),
+        supabase.from('careers').select('*'),
+        supabase.from('reviews').select('*'),
+        supabase.from('audits').select('*'),
+        supabase.from('notifications').select('*')
+      ]);
+
+      if (usersData && usersData.length > 0) {
+        setUsers(usersData);
+        // Sincronizar el usuario logueado con sus datos más recientes
+        const savedActive = localStorage.getItem('aura_active_user');
+        if (savedActive) {
+          try {
+            const activeObj = JSON.parse(savedActive);
+            const fresh = usersData.find(u => u.id === activeObj.id);
+            if (fresh) setCurrentUser(fresh);
+          } catch (e) {}
+        }
+      }
+      if (sessionsData) setSessions(sessionsData);
+      if (careersData && careersData.length > 0) setCareers(careersData);
+      if (reviewsData) setReviews(reviewsData);
+      if (auditsData) setAudits(auditsData);
+      if (notifsData) setNotifications(notifsData);
+    } catch (e) {
+      console.error('Error al sincronizar con Supabase:', e);
+    }
+  };
+
+  useEffect(() => {
+    loadDataFromSupabase();
+
+    // Escuchar cambios en tiempo real desde Supabase para sincronizar entre diferentes dispositivos
+    const channel = supabase.channel('aura_db_changes')
+      .on('postgres_changes', { event: '*', schema: 'public' }, () => {
+        loadDataFromSupabase();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem('aura_active_user', JSON.stringify(currentUser));
       setUsers(prevUsers => prevUsers.map(u => u.id === currentUser.id ? currentUser : u));
+      // Guardar cambios del perfil / materias / color en Supabase
+      supabase.from('users').upsert(currentUser).catch(err => console.error('Error guardando usuario en Supabase:', err));
     } else {
       localStorage.removeItem('aura_active_user');
     }
@@ -316,6 +368,7 @@ export default function App() {
       details
     };
     setAudits(prev => [newAudit, ...prev]);
+    supabase.from('audits').insert([newAudit]).catch(e => console.error('Error guardando auditoría:', e));
   };
 
   const addNotification = (userId, title, text, sessionId = null, type = 'general') => {
@@ -330,6 +383,7 @@ export default function App() {
       read: false
     };
     setNotifications(prev => [newNotif, ...prev]);
+    supabase.from('notifications').insert([newNotif]).catch(e => console.error('Error guardando notificación:', e));
   };
 
   const showToast = (message, type = 'success') => {
@@ -354,11 +408,21 @@ export default function App() {
     showToast(`¡Bienvenido, ${targetUser.role === 'admin' ? 'Admin Global' : targetUser.name}!`);
   };
 
-  const handleRegisterSuccess = (newUser) => {
-    setUsers(prev => [...prev, newUser]);
-    setAuthView('login');
-    logAudit(newUser.name, 'REGISTRO EXITOSO', `Cuenta creada y activada (${newUser.email})`);
-    showToast('¡Registro exitoso! Ya puedes iniciar sesión con tus datos.');
+  const handleRegisterSuccess = async (newUser) => {
+    try {
+      const { error } = await supabase.from('users').insert([newUser]);
+      if (error) {
+        showToast('Error al registrar en base de datos: ' + error.message, 'danger');
+        return;
+      }
+      setUsers(prev => [...prev, newUser]);
+      setAuthView('login');
+      logAudit(newUser.name, 'REGISTRO EXITOSO', `Cuenta creada y activada (${newUser.email})`);
+      showToast('¡Registro exitoso! Ya puedes iniciar sesión con tus datos.');
+    } catch (e) {
+      console.error(e);
+      showToast('Error de conexión con la base de datos', 'danger');
+    }
   };
 
   const handleLogout = () => {
@@ -369,13 +433,20 @@ export default function App() {
     showToast('Has cerrado sesión correctamente');
   };
 
-  const handleDeleteAccount = () => {
+  const handleDeleteAccount = async () => {
     if (deleteConfirmText !== 'ELIMINAR') {
       showToast('Debes escribir la palabra ELIMINAR en mayúsculas', 'danger');
       return;
     }
-    logAudit(currentUser.name, 'ELIMINACIÓN DE CUENTA', `El usuario eliminó permanentemente su cuenta (${currentUser.email})`);
-    const updatedUsers = users.filter(u => u.id !== currentUser.id);
+    const userId = currentUser.id;
+    const userName = currentUser.name;
+    const userEmail = currentUser.email;
+
+    logAudit(userName, 'ELIMINACIÓN DE CUENTA', `El usuario eliminó permanentemente su cuenta (${userEmail})`);
+    
+    await supabase.from('users').delete().eq('id', userId);
+
+    const updatedUsers = users.filter(u => u.id !== userId);
     setUsers(updatedUsers);
     setCurrentUser(null);
     setShowDeleteModal(false);
@@ -432,7 +503,7 @@ export default function App() {
     }
   };
 
-  const handleBookSession = (e) => {
+  const handleBookSession = async (e) => {
     e.preventDefault();
     if (!bookingDate || !bookingTime || !bookingSubject) {
       showToast('Completa todos los campos', 'danger');
@@ -459,7 +530,9 @@ export default function App() {
       chat: []
     };
 
-    setSessions([...sessions, newSession]);
+    setSessions(prev => [...prev, newSession]);
+    supabase.from('sessions').insert([newSession]).catch(err => console.error('Error guardando sesión:', err));
+
     addNotification(
       selectedTutorForBooking.id,
       'Nueva Solicitud de Tutoría',
@@ -475,24 +548,28 @@ export default function App() {
     showToast('Tutoría solicitada con éxito. Estado Pendiente.');
   };
 
-  const handleSendChatMessage = (e) => {
+  const handleSendChatMessage = async (e) => {
     e.preventDefault();
     if (!chatMessageText.trim()) return;
 
+    const currentSession = sessions.find(s => s.id === activeChatSession.id);
+    const newChat = [...(currentSession?.chat || []), { sender: currentUser.name, text: chatMessageText, time: 'Ahora' }];
+
     const updatedSessions = sessions.map(s => {
       if (s.id === activeChatSession.id) {
-        const newChat = [...(s.chat || []), { sender: currentUser.name, text: chatMessageText, time: 'Ahora' }];
         return { ...s, chat: newChat };
       }
       return s;
     });
 
     setSessions(updatedSessions);
-    setActiveChatSession(updatedSessions.find(s => s.id === activeChatSession.id));
+    setActiveChatSession({ ...activeChatSession, chat: newChat });
     setChatMessageText('');
+
+    supabase.from('sessions').update({ chat: newChat }).eq('id', activeChatSession.id).catch(e => console.error(e));
   };
 
-  const handleRatingSubmit = (e) => {
+  const handleRatingSubmit = async (e) => {
     e.preventDefault();
     if (!sessionToRate) return;
 
@@ -511,6 +588,9 @@ export default function App() {
     setReviews([newReview, ...reviews]);
     setSessions(sessions.map(s => s.id === sessionToRate.id ? { ...s, status: 'completed' } : s));
     
+    supabase.from('reviews').insert([newReview]).catch(e => console.error(e));
+    supabase.from('sessions').update({ status: 'completed' }).eq('id', sessionToRate.id).catch(e => console.error(e));
+
     logAudit(currentUser.name, 'VALORACIÓN DE TUTORÍA', `Calificó con ${validRating} estrellas a ${sessionToRate.tutorName}`);
     showToast('¡Gracias por calificar la tutoría!');
     setSessionToRate(null);
@@ -520,6 +600,7 @@ export default function App() {
 
   const handleNotificationClick = (notif) => {
     setNotifications(notifications.map(n => n.id === notif.id ? { ...n, read: true } : n));
+    supabase.from('notifications').update({ read: true }).eq('id', notif.id).catch(e => console.error(e));
     setShowNotificationsModal(false);
 
     if (notif.type === 'rate_tutor' || notif.title.includes('Califica')) {
@@ -561,6 +642,7 @@ export default function App() {
   const handleAcceptSessionRequest = (sessionObj) => {
     const updatedSessions = sessions.map(s => s.id === sessionObj.id ? { ...s, status: 'confirmed' } : s);
     setSessions(updatedSessions);
+    supabase.from('sessions').update({ status: 'confirmed' }).eq('id', sessionObj.id).catch(e => console.error(e));
     addNotification(sessionObj.studentId, 'Tutoría Confirmada', `Tu tutor ${currentUser.name} ha aceptado tu tutoría de ${sessionObj.subject}.`, sessionObj.id, 'general');
     logAudit(currentUser.name, 'TUTORÍA ACEPTADA', `Aceptó la solicitud de ${sessionObj.studentName}`);
     showToast('¡Tutoría aceptada con éxito!');
@@ -570,6 +652,7 @@ export default function App() {
   const handleRejectSessionRequest = (sessionObj) => {
     const updatedSessions = sessions.map(s => s.id === sessionObj.id ? { ...s, status: 'rejected' } : s);
     setSessions(updatedSessions);
+    supabase.from('sessions').update({ status: 'rejected' }).eq('id', sessionObj.id).catch(e => console.error(e));
     addNotification(sessionObj.studentId, 'Tutoría Rechazada', `Tu tutor ${currentUser.name} no pudo aceptar tu solicitud de ${sessionObj.subject}.`, sessionObj.id, 'general');
     logAudit(currentUser.name, 'TUTORÍA RECHAZADA', `Rechazó la solicitud de ${sessionObj.studentName}`);
     showToast('Solicitud de tutoría rechazada.', 'danger');
@@ -779,6 +862,7 @@ export default function App() {
                               <button onClick={() => {
                                 const newStatus = u.status === 'active' ? 'inactive' : 'active';
                                 setUsers(users.map(x => x.id === u.id ? { ...x, status: newStatus } : x));
+                                supabase.from('users').update({ status: newStatus }).eq('id', u.id).catch(e => console.error(e));
                                 logAudit(currentUser.name, 'CAMBIO DE ESTADO', `Se cambió estado de ${u.name} a ${newStatus}`);
                                 showToast(`Usuario ${newStatus === 'active' ? 'activado' : 'suspendido'} con éxito`);
                               }} className="font-bold px-3.5 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl">Modificar Estado</button>
@@ -927,7 +1011,9 @@ export default function App() {
                       </div>
                       <button onClick={() => {
                         if (!newCareerName || !newCareerCode) return showToast('Completa los campos', 'danger');
-                        setCareers([...careers, { id: `car_${Date.now()}`, code: newCareerCode, name: newCareerName }]);
+                        const newCar = { id: `car_${Date.now()}`, code: newCareerCode, name: newCareerName };
+                        setCareers([...careers, newCar]);
+                        supabase.from('careers').insert([newCar]).catch(e => console.error(e));
                         setNewCareerName(''); setNewCareerCode('');
                         logAudit(currentUser.name, 'CARRERA AÑADIDA', `Nueva carrera: ${newCareerName}`);
                         showToast('Carrera actualizada con éxito');
@@ -992,6 +1078,7 @@ export default function App() {
                           <td className="p-3.5 text-right space-x-2">
                             <button onClick={() => {
                               setReviews(reviews.filter(item => item.id !== r.id));
+                              supabase.from('reviews').delete().eq('id', r.id).catch(e => console.error(e));
                               logAudit(currentUser.name, 'RESEÑA ELIMINADA', `Se eliminó opinión de ${r.author}`);
                               showToast('Publicación eliminada con éxito');
                             }} className="px-3.5 py-1.5 bg-red-600 text-white font-bold rounded-xl text-sm">Eliminar Opinión</button>
@@ -1149,7 +1236,11 @@ export default function App() {
                         <Download className="w-4.5 h-4.5" /> 
                         <span>Exportar Bitácora CSV</span>
                       </button>
-                      <button onClick={() => { setAudits([]); showToast('Bitácora de auditoría limpia', 'success'); }} className="text-sm font-bold px-3.5 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-700">
+                      <button onClick={() => { 
+                        setAudits([]); 
+                        supabase.from('audits').delete().neq('id', '0').catch(e => console.error(e));
+                        showToast('Bitácora de auditoría limpia', 'success'); 
+                      }} className="text-sm font-bold px-3.5 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-700">
                         Limpiar Bitácora
                       </button>
                     </div>
