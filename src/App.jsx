@@ -4,7 +4,8 @@ import {
   Check, Activity, Users, MessageSquareOff, BarChart3, ShieldCheck,
   Search, Calendar, Download, Filter, Star, PieChart, Camera,
   Palette, Clock, Trash2, ShieldAlert, MessageCircle, CheckCircle,
-  XCircle, KeyRound, UserPlus, Bell, X, Mail, Lock, ChevronDown, ChevronRight, Save, Edit3, FileText
+  XCircle, KeyRound, UserPlus, Bell, X, Mail, Lock, ChevronDown, ChevronRight, Save, Edit3, FileText,
+  TrendingUp, CheckCircle2, Clock3
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -1112,6 +1113,98 @@ export default function App() {
   const tutorPercentage = totalNonAdminUsersCount > 0 ? (activeTutorsCount / totalNonAdminUsersCount) * 100 : 0;
   const studentDashArray = `${studentPercentage} 100`;
 
+  // Helper para determinar la carrera correspondiente a una tutoría
+  const getSessionCareer = (session) => {
+    if (!session) return 'Otras Carreras';
+    // 1. Buscar en materias detalladas del tutor
+    const tutor = (users || []).find(u => u && u.id === session.tutorId);
+    if (tutor && Array.isArray(tutor.subjectsDetailed)) {
+      const match = tutor.subjectsDetailed.find(sd => sd.name === session.subject);
+      if (match && match.career) return match.career;
+    }
+    // 2. Buscar en materias detalladas de cualquier usuario
+    for (const u of (users || [])) {
+      if (u && Array.isArray(u.subjectsDetailed)) {
+        const match = u.subjectsDetailed.find(sd => sd.name === session.subject);
+        if (match && match.career) return match.career;
+      }
+    }
+    // 3. Carrera registrada del tutor
+    if (tutor && tutor.career) return tutor.career;
+    // 4. Carrera registrada del estudiante
+    const student = (users || []).find(u => u && u.id === session.studentId);
+    if (student && student.career) return student.career;
+    return 'Otras Carreras';
+  };
+
+  // Métricas generales de tutorías
+  const totalSessionsCount = (sessions || []).length;
+  const completedSessionsCount = (sessions || []).filter(s => s.status === 'completed').length;
+  const pendingSessionsCount = (sessions || []).filter(s => s.status === 'pending').length;
+  const confirmedSessionsCount = (sessions || []).filter(s => s.status === 'confirmed').length;
+  const inWaitingSessionsCount = pendingSessionsCount + confirmedSessionsCount; // En período de espera
+  const rejectedSessionsCount = (sessions || []).filter(s => s.status === 'rejected').length;
+
+  const completedPctGeneral = totalSessionsCount > 0 ? (completedSessionsCount / totalSessionsCount) * 100 : 0;
+  const inWaitingPctGeneral = totalSessionsCount > 0 ? (inWaitingSessionsCount / totalSessionsCount) * 100 : 0;
+  const rejectedPctGeneral = totalSessionsCount > 0 ? (rejectedSessionsCount / totalSessionsCount) * 100 : 0;
+
+  // Métricas desglosadas por carrera
+  const careerStats = (careers || []).map(career => {
+    const careerSessions = (sessions || []).filter(s => getSessionCareer(s) === career.name);
+    const total = careerSessions.length;
+    const completed = careerSessions.filter(s => s.status === 'completed').length;
+    const pending = careerSessions.filter(s => s.status === 'pending').length;
+    const confirmed = careerSessions.filter(s => s.status === 'confirmed').length;
+    const inWaiting = pending + confirmed;
+    const rejected = careerSessions.filter(s => s.status === 'rejected').length;
+
+    const completedPct = total > 0 ? (completed / total) * 100 : 0;
+    const inWaitingPct = total > 0 ? (inWaiting / total) * 100 : 0;
+    const rejectedPct = total > 0 ? (rejected / total) * 100 : 0;
+    const shareOfTotal = totalSessionsCount > 0 ? (total / totalSessionsCount) * 100 : 0;
+
+    return {
+      id: career.id,
+      name: career.name,
+      code: career.code,
+      total,
+      completed,
+      inWaiting,
+      pending,
+      confirmed,
+      rejected,
+      completedPct,
+      inWaitingPct,
+      rejectedPct,
+      shareOfTotal
+    };
+  });
+
+  // Si hay tutorías asociadas a una carrera que no figure en la lista oficial
+  const otherCareerSessions = (sessions || []).filter(s => !(careers || []).some(c => c.name === getSessionCareer(s)));
+  if (otherCareerSessions.length > 0) {
+    const total = otherCareerSessions.length;
+    const completed = otherCareerSessions.filter(s => s.status === 'completed').length;
+    const inWaiting = otherCareerSessions.filter(s => s.status === 'pending' || s.status === 'confirmed').length;
+    const rejected = otherCareerSessions.filter(s => s.status === 'rejected').length;
+    careerStats.push({
+      id: 'car_other',
+      name: 'Otras Carreras',
+      code: 'OTR',
+      total,
+      completed,
+      inWaiting,
+      pending: otherCareerSessions.filter(s => s.status === 'pending').length,
+      confirmed: otherCareerSessions.filter(s => s.status === 'confirmed').length,
+      rejected,
+      completedPct: total > 0 ? (completed / total) * 100 : 0,
+      inWaitingPct: total > 0 ? (inWaiting / total) * 100 : 0,
+      rejectedPct: total > 0 ? (rejected / total) * 100 : 0,
+      shareOfTotal: totalSessionsCount > 0 ? (total / totalSessionsCount) * 100 : 0
+    });
+  }
+
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800 font-sans flex flex-col text-sm sm:text-base">
       {toast && (
@@ -1627,29 +1720,194 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="bg-white p-6 rounded-3xl border shadow-sm space-y-4">
-                  <div className="flex items-center space-x-2.5 border-b pb-3.5">
-                    <PieChart className="w-5 h-5" style={{ color: primaryColor }} />
-                    <h3 className="font-bold text-lg text-slate-800">Distribución de la Comunidad</h3>
+                {/* MÓDULO DE DEMANDA Y RENDIMIENTO DE TUTORÍAS POR CARRERA */}
+                <div className="bg-white p-6 sm:p-8 rounded-3xl border shadow-sm space-y-6">
+                  {/* Encabezado del Módulo */}
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b pb-4 gap-3">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2.5 rounded-2xl bg-blue-50 shrink-0" style={{ color: primaryColor }}>
+                        <TrendingUp className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h3 className="font-extrabold text-xl text-slate-900">Demanda y Rendimiento de Tutorías</h3>
+                        <p className="text-xs sm:text-sm text-slate-500 font-medium">
+                          Métricas globales y distribución de clases académicas solicitadas por carrera en el sistema.
+                        </p>
+                      </div>
+                    </div>
+                    <span className="px-4 py-2 rounded-xl text-xs sm:text-sm font-extrabold bg-slate-100 text-slate-700 border shadow-xs shrink-0">
+                      Total: {totalSessionsCount} Tutorías Registradas
+                    </span>
                   </div>
-                  <div className="p-4">
-                    <p className="text-sm text-slate-600 mb-6">Gráfica general de participación en AURA Estudiantil.</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-                      <div className="p-5 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col justify-between shadow-sm min-h-[120px]">
-                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">VOLUMEN DE USUARIOS</span>
-                        <span className="text-3xl font-black text-emerald-700 my-1">{totalNonAdminUsersCount}</span>
-                        <span className="text-xs font-bold text-emerald-700 block">Comunidad Activa</span>
+
+                  {/* 4 Tarjetas de Métricas Generales */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* Total */}
+                    <div className="p-5 rounded-2xl border bg-slate-50 flex flex-col justify-between shadow-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black uppercase text-slate-500 tracking-wider">TUTORÍAS EN GENERAL</span>
+                        <BookOpen className="w-5 h-5 text-slate-400" />
                       </div>
-                      <div className="p-5 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col justify-between shadow-sm min-h-[120px]">
-                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">ESTUDIANTES ACTIVOS</span>
-                        <span className="text-3xl font-black my-1" style={{ color: primaryColor }}>{activeStudentsCount}</span>
-                        <span className="text-xs font-bold block" style={{ color: primaryColor }}>Estudiantes registrados</span>
+                      <div className="my-2">
+                        <span className="text-3xl font-black text-slate-900">{totalSessionsCount}</span>
                       </div>
-                      <div className="p-5 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col justify-between shadow-sm min-h-[120px]">
-                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">TUTORES ACTIVOS</span>
-                        <span className="text-3xl font-black text-amber-700 my-1">{activeTutorsCount}</span>
-                        <span className="text-xs font-bold text-amber-700 block">Docentes activos</span>
+                      <span className="text-xs font-bold text-slate-600">Total en la plataforma</span>
+                    </div>
+
+                    {/* Exitosas / Completadas */}
+                    <div className="p-5 rounded-2xl border border-emerald-200 bg-emerald-50/50 flex flex-col justify-between shadow-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black uppercase text-emerald-800 tracking-wider">COMPLETADAS CON ÉXITO</span>
+                        <CheckCircle2 className="w-5 h-5 text-emerald-600" />
                       </div>
+                      <div className="my-2 flex items-baseline space-x-2">
+                        <span className="text-3xl font-black text-emerald-700">{completedSessionsCount}</span>
+                        <span className="text-xs font-black text-emerald-600">({completedPctGeneral.toFixed(1)}%)</span>
+                      </div>
+                      <span className="text-xs font-bold text-emerald-700">Impartidas satisfactoriamente</span>
+                    </div>
+
+                    {/* En espera / Por realizarse */}
+                    <div className="p-5 rounded-2xl border border-amber-200 bg-amber-50/50 flex flex-col justify-between shadow-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black uppercase text-amber-800 tracking-wider">EN PERÍODO DE ESPERA</span>
+                        <Clock3 className="w-5 h-5 text-amber-600" />
+                      </div>
+                      <div className="my-2 flex items-baseline space-x-2">
+                        <span className="text-3xl font-black text-amber-700">{inWaitingSessionsCount}</span>
+                        <span className="text-xs font-black text-amber-600">({inWaitingPctGeneral.toFixed(1)}%)</span>
+                      </div>
+                      <span className="text-xs font-bold text-amber-700">Pendientes y confirmadas</span>
+                    </div>
+
+                    {/* No completadas / Rechazadas */}
+                    <div className="p-5 rounded-2xl border border-rose-200 bg-rose-50/50 flex flex-col justify-between shadow-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black uppercase text-rose-800 tracking-wider">NO COMPLETADAS</span>
+                        <XCircle className="w-5 h-5 text-rose-600" />
+                      </div>
+                      <div className="my-2 flex items-baseline space-x-2">
+                        <span className="text-3xl font-black text-rose-700">{rejectedSessionsCount}</span>
+                        <span className="text-xs font-black text-rose-600">({rejectedPctGeneral.toFixed(1)}%)</span>
+                      </div>
+                      <span className="text-xs font-bold text-rose-700">Rechazadas o canceladas</span>
+                    </div>
+                  </div>
+
+                  {/* Barra Global de Balance de Estados */}
+                  <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50 space-y-3">
+                    <div className="flex justify-between items-center text-xs font-bold uppercase text-slate-600">
+                      <span>Balance Global de Efectividad de Tutorías</span>
+                      <span>{totalSessionsCount} Clases en Total</span>
+                    </div>
+                    {totalSessionsCount > 0 ? (
+                      <div className="w-full h-4 bg-slate-200 rounded-full overflow-hidden flex shadow-inner">
+                        <div style={{ width: `${completedPctGeneral}%` }} className="bg-emerald-500 h-full transition-all duration-500" title={`Completadas con éxito: ${completedSessionsCount} (${completedPctGeneral.toFixed(1)}%)`} />
+                        <div style={{ width: `${inWaitingPctGeneral}%` }} className="bg-amber-400 h-full transition-all duration-500" title={`En espera: ${inWaitingSessionsCount} (${inWaitingPctGeneral.toFixed(1)}%)`} />
+                        <div style={{ width: `${rejectedPctGeneral}%` }} className="bg-rose-500 h-full transition-all duration-500" title={`No completadas: ${rejectedSessionsCount} (${rejectedPctGeneral.toFixed(1)}%)`} />
+                      </div>
+                    ) : (
+                      <div className="w-full h-4 bg-slate-200 rounded-full flex items-center justify-center text-[10px] text-slate-500 font-bold">
+                        Sin tutorías registradas aún en el sistema
+                      </div>
+                    )}
+                    <div className="flex flex-wrap items-center justify-between text-xs font-semibold text-slate-600 pt-1 gap-2">
+                      <div className="flex items-center space-x-2">
+                        <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block" />
+                        <span>Completadas con éxito ({completedSessionsCount}) • {completedPctGeneral.toFixed(1)}%</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <span className="w-3 h-3 rounded-full bg-amber-400 inline-block" />
+                        <span>En período de espera ({inWaitingSessionsCount}) • {inWaitingPctGeneral.toFixed(1)}%</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <span className="w-3 h-3 rounded-full bg-rose-500 inline-block" />
+                        <span>No completadas ({rejectedSessionsCount}) • {rejectedPctGeneral.toFixed(1)}%</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Sección: Desglose y Métricas por Carrera */}
+                  <div className="space-y-4 pt-2">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                      <div>
+                        <h4 className="font-extrabold text-base sm:text-lg text-slate-800">
+                          Distribución y Métricas por Carrera
+                        </h4>
+                        <p className="text-xs text-slate-500 font-medium">
+                          Detalle analítico de demanda y efectividad según las materias y clases activas de cada carrera.
+                        </p>
+                      </div>
+                      <span className="text-xs text-slate-500 font-bold bg-slate-100 px-3 py-1.5 rounded-xl border">
+                        {careerStats.length} carreras evaluadas
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {careerStats.map((c) => (
+                        <div key={c.id} className="p-5 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 transition-all shadow-xs space-y-3.5 flex flex-col justify-between">
+                          <div className="space-y-3">
+                            {/* Cabecera de Carrera */}
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-2.5 min-w-0">
+                                <span className="font-black px-2.5 py-1 bg-slate-100 border rounded-lg text-xs tracking-wider" style={{ color: primaryColor }}>
+                                  {c.code || 'CAR'}
+                                </span>
+                                <span className="font-extrabold text-slate-900 text-sm sm:text-base truncate">
+                                  {c.name}
+                                </span>
+                              </div>
+                              <span className={`px-3 py-1 rounded-full text-xs font-black shrink-0 ${c.total > 0 ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-500'}`}>
+                                {c.total} {c.total === 1 ? 'tutoría' : 'tutorías'}
+                              </span>
+                            </div>
+
+                            {/* Frase Descriptiva Dinámica */}
+                            <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs text-slate-700 leading-relaxed font-medium">
+                              {c.total > 0 ? (
+                                <span>
+                                  En <strong className="text-slate-900">{c.name}</strong> hay <strong className="text-slate-900">{c.total}</strong> {c.total === 1 ? 'tutoría registrada' : 'tutorías registradas'}, de las cuales <strong className="text-emerald-700">{c.completed}</strong> se {c.completed === 1 ? 'realizó' : 'realizaron'} con éxito, <strong className="text-amber-700">{c.inWaiting}</strong> {c.inWaiting === 1 ? 'está' : 'están'} en período de espera para realizarse y <strong className="text-rose-700">{c.rejected}</strong> no se {c.rejected === 1 ? 'completó' : 'completaron'}.
+                                </span>
+                              ) : (
+                                <span className="text-slate-500 italic">
+                                  En <strong className="text-slate-700">{c.name}</strong> no se registran solicitudes de tutorías hasta el momento.
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Mini Barra de Distribución Proporcional */}
+                            <div className="space-y-1">
+                              <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden flex">
+                                {c.total > 0 ? (
+                                  <>
+                                    <div style={{ width: `${c.completedPct}%` }} className="bg-emerald-500 h-full" title={`Exitosas: ${c.completed} (${c.completedPct.toFixed(0)}%)`} />
+                                    <div style={{ width: `${c.inWaitingPct}%` }} className="bg-amber-400 h-full" title={`En espera: ${c.inWaiting} (${c.inWaitingPct.toFixed(0)}%)`} />
+                                    <div style={{ width: `${c.rejectedPct}%` }} className="bg-rose-500 h-full" title={`No completadas: ${c.rejected} (${c.rejectedPct.toFixed(0)}%)`} />
+                                  </>
+                                ) : (
+                                  <div className="w-full bg-slate-200 h-full" />
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* 3 Badges de Estados Detallados */}
+                          <div className="grid grid-cols-3 gap-2 pt-1 text-center">
+                            <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-100">
+                              <span className="block text-[10px] font-black uppercase text-emerald-800">Exitosas</span>
+                              <span className="text-sm font-black text-emerald-700">{c.completed}</span>
+                            </div>
+                            <div className="p-2 rounded-xl bg-amber-50 border border-amber-100">
+                              <span className="block text-[10px] font-black uppercase text-amber-800">En Espera</span>
+                              <span className="text-sm font-black text-amber-700">{c.inWaiting}</span>
+                            </div>
+                            <div className="p-2 rounded-xl bg-rose-50 border border-rose-100">
+                              <span className="block text-[10px] font-black uppercase text-rose-800">No Realizadas</span>
+                              <span className="text-sm font-black text-rose-700">{c.rejected}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
