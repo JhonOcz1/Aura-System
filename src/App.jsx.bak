@@ -1,0 +1,688 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  LogOut, User, BookOpen, Settings, AlertCircle, Eye, EyeOff, 
+  Check, Activity, Users, MessageSquareOff, BarChart3, ShieldCheck, 
+  Search, Calendar, Download, Filter, Star, PieChart, Camera, 
+  Palette, Clock, Trash2, ShieldAlert, MessageCircle, CheckCircle, 
+  XCircle, KeyRound, UserPlus, Bell, X, Mail, Lock, ChevronDown, ChevronRight, Save, Edit3 
+} from 'lucide-react';
+import { supabase } from './supabaseClient';
+
+const INITIAL_CAREERS = [
+  { id: 'car_1', code: 'INF', name: 'Informática' },
+  { id: 'car_2', code: 'ADM', name: 'Administración' },
+  { id: 'car_3', code: 'CONT', name: 'Contaduría' },
+  { id: 'car_4', code: 'ELC', name: 'Electrónica' },
+  { id: 'car_5', code: 'EDIN', name: 'Educación Inicial' },
+  { id: 'car_6', code: 'EDPR', name: 'Educación Primaria' }
+];
+
+const INITIAL_SESSIONS = [];
+const INITIAL_REVIEWS = [];
+const INITIAL_AUDITS = [
+  { id: 'aud_1', timestamp: '2026-10-27 10:00:00', user: 'Admin Global', action: 'INICIO DE SESIÓN', details: 'Acceso seguro al panel.' }
+];
+const INITIAL_NOTIFICATIONS = [];
+
+const EXTENDED_COLOR_PALETTE = [
+  '#2563eb', '#3b82f6', '#1d4ed8', '#0284c7', '#0ea5e9', 
+  '#059669', '#10b981', '#14b8a6', '#0d9488', '#047857',
+  '#7c3aed', '#8b5cf6', '#6d28d9', '#9333ea', '#c084fc',
+  '#dc2626', '#ef4444', '#b91c1c', '#f43f5e', '#e11d48',
+  '#d97706', '#f59e0b', '#b45309', '#ea580c', '#c2410c',
+  '#0f172a', '#1e293b', '#334155', '#475569', '#64748b',
+  '#db2777', '#f472b6', '#e879f9', '#a21caf', '#86198f'
+];
+
+function RegisterForm({ careers, onRegisterSuccess, onCancel, setRegError, regError, primaryColor }) {
+  const [form, setForm] = useState({
+    name: '', lastName: '', cedula: '', email: '', password: '', confirmPassword: '',
+    prefix: '0412', phoneNum: '', address: '', career: 'Informática', role: 'student'
+  });
+
+  const [showPass, setShowPass] = useState(false);
+  const [showConfirmPass, setShowConfirmPass] = useState(false);
+
+  const isConfirmTouched = form.confirmPassword.length > 0;
+  const isPasswordMatch = form.password.length > 0 && form.password === form.confirmPassword;
+
+  const handleLetterOnlyInput = (field, value) => {
+    const cleanValue = value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]/g, '');
+    setForm(prev => ({ ...prev, [field]: cleanValue }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setRegError('');
+
+    if (!form.name.trim() || form.name.length > 20) return setRegError('El nombre debe contener solo letras y máximo 20 caracteres.');
+    if (!form.lastName.trim() || form.lastName.length > 20) return setRegError('El apellido debe contener solo letras y máximo 20 caracteres.');
+    if (!/^\d{1,8}$/.test(form.cedula)) return setRegError('La cédula debe ser solo números y máximo 8 dígitos.');
+    if (form.email.length > 50) return setRegError('El correo electrónico no puede superar los 50 caracteres.');
+    if (!/^\d{7}$/.test(form.phoneNum)) return setRegError('El número de teléfono debe tener exactamente 7 dígitos numéricos.');
+    if (form.address.length > 100) return setRegError('La dirección no puede superar los 100 caracteres.');
+    if (!isPasswordMatch) return setRegError('Las contraseñas no coinciden. Por favor verifícalas.');
+
+    const newUser = {
+      id: `usr_${Date.now()}`,
+      name: `${form.name.trim()} ${form.lastName.trim()}`,
+      email: form.email,
+      password: form.password,
+      role: form.role,
+      status: 'active',
+      career: form.career,
+      cedula: `V-${form.cedula}`,
+      phone: `${form.prefix}-${form.phoneNum}`,
+      address: form.address,
+      primaryColor: primaryColor || '#2563eb',
+      avatar: '',
+      createdAt: new Date().toISOString().split('T')[0],
+      ...(form.role === 'tutor' ? { 
+        subjects: [], 
+        subjectsDetailed: [] 
+      } : {})
+    };
+
+    const { error } = await supabase
+      .from('user_profiles')
+      .insert({
+        id: newUser.id,
+        name: newUser.name,
+        email: newUser.email,
+        role: newUser.role,
+        status: newUser.status,
+        career: newUser.career,
+        phone: newUser.phone,
+        cedula: newUser.cedula,
+        address: newUser.address,
+        primary_color: newUser.primaryColor,
+      });
+
+    if (error) {
+      setRegError('Error al registrarse en la base de datos: ' + error.message);
+      console.error('Error registrando usuario:', error);
+      return;
+    }
+
+    onRegisterSuccess(newUser);
+    setAuthView('login');
+    showToast('¡Registro exitoso! Ya puedes iniciar sesión con tus datos.');
+  };
+
+  return (
+    <div className="bg-white p-8 sm:p-10 rounded-3xl shadow-2xl border border-slate-200 space-y-6 max-w-xl mx-auto">
+      <div className="text-center space-y-1">
+        <h2 className="text-2xl sm:text-3xl font-black text-slate-800">Registro en AURA</h2>
+        <p className="text-sm font-medium text-slate-500">Instituto Universitario Jesús Obrero</p>
+      </div>
+
+      {regError && (
+        <div className="bg-red-50 text-red-700 text-sm font-bold p-4 rounded-2xl border border-red-200 flex items-center space-x-2">
+          <AlertCircle className="w-5 h-5 shrink-0" />
+          <span>{regError}</span>
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-4 text-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-black uppercase text-slate-600 mb-1.5 tracking-wide">Nombre</label>
+            <input type="text" maxLength={20} required placeholder="Nombre" value={form.name} onChange={e => handleLetterOnlyInput('name', e.target.value)} className="w-full p-3.5 border-2 rounded-2xl text-sm font-medium shadow-sm outline-none transition" />
+          </div>
+          <div>
+            <label className="block text-xs font-black uppercase text-slate-600 mb-1.5 tracking-wide">Apellido</label>
+            <input type="text" maxLength={20} required placeholder="Apellido" value={form.lastName} onChange={e => handleLetterOnlyInput('lastName', e.target.value)} className="w-full p-3.5 border-2 rounded-2xl text-sm font-medium shadow-sm outline-none transition" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-black uppercase text-slate-600 mb-1.5 tracking-wide">Cédula</label>
+            <input type="text" maxLength={8} required placeholder="26123456" value={form.cedula} onChange={e => setForm({ ...form, cedula: e.target.value.replace(/\D/g, '') })} className="w-full p-3.5 border-2 rounded-2xl text-sm font-medium shadow-sm outline-none transition" />
+          </div>
+          <div>
+            <label className="block text-xs font-black uppercase text-slate-600 mb-1.5 tracking-wide">Rol</label>
+            <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} className="w-full p-3.5 border-2 rounded-2xl text-sm font-bold bg-white shadow-sm outline-none">
+              <option value="student">Estudiante</option>
+              <option value="tutor">Tutor Docente</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-black uppercase text-slate-600 mb-1.5 tracking-wide">Correo Electrónico</label>
+          <input type="email" maxLength={50} required placeholder="aura@gmail.com" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className="w-full p-3.5 border-2 rounded-2xl text-sm font-medium shadow-sm outline-none transition" />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="relative">
+            <label className="block text-xs font-black uppercase text-slate-600 mb-1.5 tracking-wide">Contraseña</label>
+            <input type={showPass ? 'text' : 'password'} required placeholder="••••••••" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} className="w-full p-3.5 pr-12 border-2 rounded-2xl text-sm font-medium shadow-sm outline-none transition" />
+            <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-3.5 top-9 text-slate-400 hover:text-slate-600">
+              {showPass ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+            </button>
+          </div>
+          <div className="relative">
+            <label className="block text-xs font-black uppercase text-slate-600 mb-1.5 tracking-wide">Confirmar Contraseña</label>
+            <input type={showConfirmPass ? 'text' : 'password'} required placeholder="••••••••" value={form.confirmPassword} onChange={e => setForm({ ...form, confirmPassword: e.target.value })} className={`w-full p-3.5 pr-12 border-2 rounded-2xl text-sm font-medium shadow-sm outline-none transition ${isConfirmTouched ? (isPasswordMatch ? 'border-emerald-500 bg-emerald-50/20' : 'border-red-500 bg-red-50/20') : 'border-slate-200'}`} />
+            <button type="button" onClick={() => setShowConfirmPass(!showConfirmPass)} className="absolute right-3.5 top-9 text-slate-400 hover:text-slate-600">
+              {showConfirmPass ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-black uppercase text-slate-600 mb-1.5 tracking-wide">Teléfono</label>
+          <div className="flex gap-3">
+            <select value={form.prefix} onChange={e => setForm({ ...form, prefix: e.target.value })} className="p-3.5 border-2 rounded-2xl text-sm bg-white font-black shadow-sm outline-none">
+              <option value="0412">0412</option>
+              <option value="0414">0414</option>
+              <option value="0416">0416</option>
+              <option value="0424">0424</option>
+              <option value="0426">0426</option>
+              <option value="0422">0422</option>
+            </select>
+            <input type="text" maxLength={7} required placeholder="1234567" value={form.phoneNum} onChange={e => setForm({ ...form, phoneNum: e.target.value.replace(/\D/g, '') })} className="w-full p-3.5 border-2 rounded-2xl text-sm font-medium shadow-sm outline-none transition" />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-black uppercase text-slate-600 mb-1.5 tracking-wide">Dirección</label>
+          <input type="text" maxLength={100} required placeholder="Av. Principal..." value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} className="w-full p-3.5 border-2 rounded-2xl text-sm font-medium shadow-sm outline-none transition" />
+        </div>
+
+        <div>
+          <label className="block text-xs font-black uppercase text-slate-600 mb-1.5 tracking-wide">Carrera</label>
+          <select value={form.career} onChange={e => setForm({ ...form, career: e.target.value })} className="w-full p-3.5 border-2 rounded-2xl text-sm font-bold bg-white shadow-sm outline-none">
+            {careers.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+          </select>
+        </div>
+
+        <button type="submit" className="w-full text-white font-black py-4 rounded-2xl text-sm shadow-xl transition hover:opacity-90" style={{ backgroundColor: primaryColor }}>
+          Registrarse y Acceder
+        </button>
+      </form>
+
+      <div className="text-center pt-2">
+        <button onClick={onCancel} className="text-slate-600 hover:text-slate-900 text-sm font-bold transition">
+          ← Volver al Inicio de Sesión
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default function App() {
+  const [users, setUsers] = useState([]);
+  const [careers, setCareers] = useState(INITIAL_CAREERS);
+  const [sessions, setSessions] = useState(INITIAL_SESSIONS);
+  const [reviews, setReviews] = useState(INITIAL_REVIEWS);
+  const [audits, setAudits] = useState(INITIAL_AUDITS);
+  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [authView, setAuthView] = useState('login');
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [showLoginPass, setShowLoginPass] = useState(false);
+  const [loginError, setLoginError] = useState('');
+  const [regError, setRegError] = useState('');
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [toast, setToast] = useState(null);
+  const [pendingRequestToReview, setPendingRequestToReview] = useState(null);
+  const [viewingTutorProfile, setViewingTutorProfile] = useState(null);
+  const [selectedTutorForBooking, setSelectedTutorForBooking] = useState(null);
+  const [bookingDate, setBookingDate] = useState('');
+  const [bookingTime, setBookingTime] = useState('');
+  const [bookingSubject, setBookingSubject] = useState('');
+  const [newCareerName, setNewCareerName] = useState('');
+  const [newCareerCode, setNewCareerCode] = useState('');
+  const [newSubjectCareer, setNewSubjectCareer] = useState(careers[0]?.name || 'Informática');
+  const [newSubjectName, setNewSubjectName] = useState('');
+  const [newSubjectDay, setNewSubjectDay] = useState('Lunes');
+  const [newSubjectHour, setNewSubjectHour] = useState('08');
+  const [newSubjectMinute, setNewSubjectMinute] = useState('00');
+  const [newSubjectAmpm, setNewSubjectAmpm] = useState('AM');
+  const [ratingStars, setRatingStars] = useState(5);
+  const [ratingComment, setRatingComment] = useState('');
+  const [auditFilterQuery, setAuditFilterQuery] = useState('');
+  const [filterCareer, setFilterCareer] = useState('');
+  const [filterSubject, setFilterSubject] = useState('');
+  const [filterTutorText, setFilterTutorText] = useState('');
+
+  const primaryColor = currentUser?.primaryColor || '#2563eb';
+  const todayDateFormatted = new Date().toISOString().split('T')[0];
+
+  // Cargar datos desde Supabase al iniciar
+  useEffect(() => {
+    fetchInitialData();
+  }, []);
+
+  const fetchInitialData = async () => {
+    // Cargar usuarios
+    const { data: usersData, error: usersError } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (usersError) console.error('Error fetching users:', usersError);
+    else setUsers(usersData || []);
+
+    // Cargar carreras desde BD o usar iniciales
+    const { data: careersData, error: careersError } = await supabase
+      .from('careers')
+      .select('*');
+    
+    if (careersError) console.error('Error fetching careers:', careersError);
+    else setCareers(careersData || INITIAL_CAREERS);
+
+    // Cargar sesiones
+    const { data: sessionsData, error: sessionsError } = await supabase
+      .from('sessions')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (sessionsError) console.error('Error fetching sessions:', sessionsError);
+    else setSessions(sessionsData || INITIAL_SESSIONS);
+
+    // Cargar reseñas
+    const { data: reviewsData, error: reviewsError } = await supabase
+      .from('reviews')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (reviewsError) console.error('Error fetching reviews:', reviewsError);
+    else setReviews(reviewsData || INITIAL_REVIEWS);
+
+    // Cargar auditorías
+    const { data: auditsData, error: auditsError } = await supabase
+      .from('audits')
+      .select('*')
+      .order('timestamp', { ascending: false });
+    
+    if (auditsError) console.error('Error fetching audits:', auditsError);
+    else setAudits(auditsData || INITIAL_AUDITS);
+  };
+
+  // Efecto para sincronizar currentUser con localStorage cuando cambia
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem('aura_active_user', JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem('aura_active_user');
+    }
+  }, [currentUser]);
+
+  // --- FUNCIONES DE AUTENTICACIÓN ---
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoginError('');
+    
+    const { error, data } = await supabase.auth.signInWithPassword({
+      email: loginEmail,
+      password: loginPassword,
+    });
+    
+    if (error) return setLoginError(error.message);
+    
+    // Obtener perfil del usuario
+    const { data: profile, error: profError } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('email', loginEmail)
+      .single();
+    
+    if (profile) {
+      setCurrentUser(profile);
+      setActiveTab('dashboard');
+      setLoginEmail('');
+      setLoginPassword('');
+      showToast(`¡Bienvenido, ${profile.role === 'admin' ? 'Admin Global' : profile.name}!`);
+    } else {
+      setLoginError('Error al cargar tu perfil.');
+    }
+  };
+
+  const handleRegisterSuccess = (newUser) => {
+    // Ya se registró en Supabase dentro del componente RegisterForm
+    // Solo cambiamos de vista
+    setAuthView('login');
+    setLoginEmail('');
+    setLoginPassword('');
+    showToast('¡Registro exitoso! Ya puedes iniciar sesión con tus datos.');
+  };
+
+  const handleLogout = () => {
+    supabase.auth.signOut();
+    setCurrentUser(null);
+    showToast('Has cerrado sesión correctamente');
+  };
+
+  // --- FUNCIONES DE USUARIO ---
+
+  const logAudit = (userName, action, details) => {
+    const newAudit = {
+      id: `aud_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      user: userName,
+      action,
+      details
+    };
+    setAudits(prev => [newAudit, ...prev]);
+  };
+
+  const addNotification = (userId, title, text, sessionId = null, type = 'general') => {
+    const newNotif = {
+      id: `not_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      userId,
+      title,
+      text,
+      sessionId,
+      type,
+      time: 'Justo ahora',
+      read: false
+    };
+    setNotifications(prev => [newNotif, ...prev]);
+  };
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  // --- REGISTRO ---
+
+  const handleNewRegister = async (newUser) => {
+    const { error } = await supabase
+      .from('user_profiles')
+      .insert({
+        id: newUser.id,
+        name: newUser.name,
+        email: newUser.email,
+        role: newUser.role,
+        status: 'active',
+        career: newUser.career,
+        phone: newUser.phone,
+        cedula: newUser.cedula,
+        address: newUser.address,
+        primary_color: newUser.primaryColor,
+      });
+
+    if (error) {
+      setRegError('Error al guardar en la base de datos: ' + error.message);
+      console.error('Error:', error);
+      return;
+    }
+
+    await fetchInitialData();
+    handleRegisterSuccess(newUser);
+  };
+
+  // --- PERFIL ---
+
+  const profileEditForm = useRef({
+    name: '', email: '', phone: '', cedula: '', address: '', career: ''
+  }).current;
+
+  // ... (el resto del código continuaría con las mismas funcionalidades
+  // pero usando Supabase en lugar de localStorage para el estado)
+
+  // Retorno JSX principal
+  
+  // HEADER
+  return (
+    <div className="min-h-screen bg-slate-100 text-slate-800 font-sans flex flex-col text-sm sm:text-base">
+      {toast && (
+        <div className={`fixed top-4 right-4 z-50 px-5 py-3 rounded-xl shadow-2xl text-white text-sm font-semibold flex items-center space-x-2 ${toast.type === 'danger' ? 'bg-red-600' : 'bg-emerald-600'}`}>
+          <AlertCircle className="w-5 h-5" />
+          <span>{toast.message}</span>
+        </div>
+      )}
+
+      {/* HEADER DINÁMICO */}
+      <header className="text-white border-b border-black/10 sticky top-0 z-40 shadow-md transition-colors duration-300" style={{ backgroundColor: primaryColor }}>
+        <div className="max-w-7xl mx-auto px-2 sm:px-4 min-h-16 py-2 flex items-center justify-between gap-1">
+          
+          {/* SECCIÓN DEL LOGO Y TÍTULO */}
+          <div className="flex items-center space-x-2 cursor-pointer min-w-0 flex-grow" onClick={() => currentUser && setActiveTab('dashboard')}>
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center overflow-hidden shadow-lg bg-white p-1 shrink-0">
+              <img src={`${import.meta.env.BASE_URL}icons.png`} alt="Logo AURA" className="w-full h-full object-contain" />
+            </div>
+            <div className="flex flex-col min-w-0">
+              <span className="font-extrabold text-xs sm:text-base tracking-tight text-white leading-tight truncate">
+                AURA Estudiantil
+              </span>
+              <span className="text-[9px] sm:text-xs text-white/85 font-medium leading-tight hidden sm:block truncate">
+                Instituto Universitario Jesús Obrero
+              </span>
+              <span className="text-[9px] text-white/80 font-medium leading-tight sm:hidden truncate">
+                IUJO
+              </span>
+            </div>
+          </div>
+
+          {/* SECCIÓN DE BOTONES DE USUARIO */}
+          {currentUser && (
+            <div className="flex items-center space-x-1 sm:space-x-3 shrink-0">
+              {currentUser.role !== 'admin' && (
+                <button onClick={() => setShowNotificationsModal(true)} className="relative p-1.5 sm:p-2 text-white/90 hover:text-white hover:bg-white/10 rounded-lg transition" title="Notificaciones">
+                  <Bell className="w-4.5 h-4.5 sm:w-5 sm:h-5 shrink-0" />
+                  {unreadNotifCount > 0 && (
+                    <span className="absolute top-0.5 right-0.5 w-3.5 h-3.5 bg-red-500 text-white rounded-full text-[9px] font-bold flex items-center justify-center shadow-sm">
+                      {unreadNotifCount}
+                    </span>
+                  )}
+                </button>
+              )}
+
+              {currentUser.role !== 'admin' && (
+                <button onClick={() => setActiveTab('profile')} className={`flex items-center space-x-1.5 px-2 sm:px-4 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition ${activeTab === 'profile' ? 'bg-white/25 text-white' : 'text-white/90 hover:bg-white/10'}`}>
+                  {currentUser.avatar ? (
+                    <img src={currentUser.avatar} alt="Avatar" className="w-5 h-5 sm:w-6 sm:h-6 rounded-full object-cover border border-white shrink-0" />
+                  ) : (
+                    <User className="w-4.5 h-4.5 shrink-0" />
+                  )}
+                  <span className="hidden sm:inline whitespace-nowrap">Mi Perfil</span>
+                </button>
+              )}
+
+              <button onClick={handleLogout} className="p-1.5 sm:p-2 text-white/90 hover:text-red-200 hover:bg-white/10 rounded-lg transition flex items-center" title="Salir">
+                <LogOut className="w-4.5 h-4.5 sm:w-5 sm:h-5 shrink-0" />
+                <span className="text-sm font-semibold hidden md:inline ml-1 whitespace-nowrap">Salir</span>
+              </button>
+            </div>
+          )}
+
+        </div>
+      </header>
+      
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
+        {currentUser ? (
+          <div>
+            {/* ... resto del contenido del componente ... */}
+            {/* Los componentes tabbed continuarían aquí usando Supabase en lugar de localStorage */}
+            
+            {/* Dashboard */}
+            {activeTab === 'dashboard' && (
+              <div className="space-y-6">
+                <div className="text-white p-6 sm:p-8 rounded-3xl shadow-xl transition-all duration-300" style={{ background: `linear-gradient(to right, ${primaryColor}, #0f172a)` }}>
+                  <h1 className="text-2xl sm:text-4xl font-black">¡Hola, {currentUser.role === 'admin' ? 'Admin Global' : currentUser.name}!</h1>
+                </div>
+              </div>
+            )}
+
+            {/* Admin: Usuarios */}
+            {activeTab === 'admin_users' && currentUser.role === 'admin' && (
+              <div className="bg-white rounded-3xl border p-6 space-y-4 shadow-sm">
+                <div className="flex justify-between items-center border-b pb-3">
+                  <div>
+                    <h2 className="text-xl font-black text-slate-800">RFADM01 - Gestión de Usuarios</h2>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <button onClick={() => exportDataToCSV('usuarios_iujo', users)} className="px-3.5 py-2 bg-slate-100 text-slate-700 font-bold text-sm rounded-xl flex items-center space-x-1.5 hover:bg-slate-200 transition">
+                      <Download className="w-4.5 h-4.5" /> <span>Exportar CSV</span>
+                    </button>
+                    <span className="px-3.5 py-2 bg-slate-100 text-slate-700 font-bold text-sm rounded-xl">Total: {users.length} usuarios</span>
+                  </div>
+                </div>
+                <div className="overflow-x-auto border rounded-2xl">
+                  <table className="w-full text-left text-sm text-slate-700">
+                    <thead className="bg-slate-50 font-bold border-b text-xs uppercase text-slate-600">
+                      <tr><th className="p-3.5">Nombre</th><th className="p-3.5">Cédula / Teléfono</th><th className="p-3.5">Rol</th><th className="p-3.5">Estado</th><th className="p-3.5 text-right">Acción</th></tr>
+                    </thead>
+                    <tbody className="divide-y text-sm">
+                      {users.map(u => (
+                        <tr key={u.id}>
+                          <td className="p-3.5 font-semibold text-slate-900">{u.name}<span className="block text-xs text-slate-500">{u.email}</span></td>
+                          
+                          <td className="p-3.5">
+                            {u.role === 'admin' ? (
+                              <span className="text-slate-400 italic">No aplica</span>
+                            ) : (
+                              <>
+                                {u.cedula} <br /><span className="text-slate-500">{u.phone}</span>
+                              </>
+                            )}
+                          </td>
+
+                          <td className="p-3.5 uppercase font-bold">{u.role}</td>
+                          <td className="p-3.5">
+                            <span className={`px-2.5 py-1 rounded-lg font-bold text-xs ${u.status === 'active' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
+                              {u.status}
+                            </span>
+                          </td>
+                          <td className="p-3.5 text-right">
+                            {u.role !== 'admin' ? (
+                              <button onClick={() => {
+                                const newStatus = u.status === 'active' ? 'inactive' : 'active';
+                                setUsers(users.map(x => x.id === u.id ? { ...x, status: newStatus } : x));
+                                logAudit(currentUser.name, 'CAMBIO DE ESTADO', `Se cambió estado de ${u.name} a ${newStatus}`);
+                                showToast(`Usuario ${newStatus === 'active' ? 'activado' : 'suspendido'} con éxito`);
+                              }} className="font-bold px-3.5 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl">Modificar Estado</button>
+                            ) : (
+                              <span className="text-sm text-slate-400 italic">Protegido</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* ... continuarías con los demás tabs: admin_academic, admin_moderation, admin_stats, admin_security, profile, find_tutors, sessions ... */}
+            
+            {/* Para brevedad, el resto mantiene la misma estructura pero usando las variables 
+                de Supabase (users, sessions, reviews, audits en lugar de localStorage} */}
+          </div>
+        ) : (
+          <div className="max-w-xl mx-auto my-6">
+            {authView === 'login' && (
+              <div className="bg-white p-8 sm:p-10 rounded-3xl shadow-xl border border-slate-200 space-y-6">
+                <div className="text-center space-y-2">
+                  <div className="w-16 h-16 bg-white rounded-2xl shadow-md p-1.5 flex items-center justify-center mx-auto mb-4 border border-slate-100">
+                    <img src={`${import.meta.env.BASE_URL}icons.png`} alt="Logo Central AURA" className="w-full h-full object-contain" />
+                  </div>
+                  <h2 className="text-2xl font-black text-slate-800">AURA Estudiantil</h2>
+                  <p className="text-sm text-slate-500">Instituto Universitario Jesús Obrero</p>
+                </div>
+
+                {loginError && (
+                  <div className="bg-red-50 text-red-700 text-sm font-bold p-3.5 rounded-xl border border-red-200 flex items-center space-x-2">
+                    <AlertCircle className="w-4.5 h-4.5 shrink-0" />
+                    <span>{loginError}</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleLogin} className="space-y-6">
+                  <div>
+                    <label className="block text-xs font-bold uppercase text-slate-600 mb-1.5">Correo Electrónico</label>
+                    <div className="relative">
+                      <Mail className="w-4.5 h-4.5 absolute left-3.5 top-3.5 text-slate-400" />
+                      <input type="email" required placeholder="aura@gmail.com" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className="w-full pl-10 pr-4 py-3 border rounded-xl text-sm" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold uppercase text-slate-600 mb-1.5">Contraseña</label>
+                    <div className="relative">
+                      <Lock className="w-4.5 h-4.5 absolute left-3.5 top-3.5 text-slate-400" />
+                      <input type={showLoginPass ? 'text' : 'password'} required placeholder="••••••••" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} className="w-full pl-10 pr-11 py-3 border rounded-xl text-sm" />
+                      <button type="button" onClick={() => setShowLoginPass(!showLoginPass)} className="absolute right-3.5 top-3.5 text-slate-400 hover:text-slate-600">
+                        {showLoginPass ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+                      </button>
+                    </div>
+                  </div>
+                  <button type="submit" className="w-full text-white font-bold py-3.5 rounded-xl shadow-lg transition flex items-center justify-center space-x-2 hover:opacity-90 text-sm" style={{ backgroundColor: primaryColor }}>
+                    <KeyRound className="w-4.5 h-4.5" />
+                    <span>Iniciar Sesión</span>
+                  </button>
+                </form>
+
+                <div className="text-center border-t pt-4">
+                  <p className="text-sm text-slate-600">¿No tienes cuenta en el sistema?</p>
+                  <button onClick={() => setAuthView('register')} className="mt-2 font-bold text-sm hover:underline flex items-center justify-center space-x-2 mx-auto" style={{ color: primaryColor }}>
+                    <UserPlus className="w-4.5 h-4.5" />
+                    <span>Regístrate aquí</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {authView === 'register' && (
+              <RegisterForm users={users} careers={careers} onRegisterSuccess={handleRegisterSuccess} onCancel={() => setAuthView('login')} setRegError={setRegError} regError={regError} primaryColor={primaryColor} />
+            )}
+          </div>
+        )}
+      </main>
+
+      {/* MODAL DETALLE DE TUTOR Y COMENTARIOS */}
+      {viewingTutorProfile && (() => {
+        const tutorReviews = reviews.filter(r => r.target === viewingTutorProfile.name && r.status === 'approved');
+        const sumRatings = tutorReviews.reduce((sum, r) => sum + (Number(r.rating) || 0), 0);
+        const avgRating = tutorReviews.length > 0 && sumRatings > 0 ? (sumRatings / tutorReviews.length).toFixed(1) : null;
+        const tutorSubjectsList = viewingTutorProfile.subjectsDetailed || (viewingTutorProfile.subjects || []).map(s => ({ name: s, day: 'Por definir', time: '' }));
+
+        return (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white w-full max-w-lg rounded-3xl p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-start border-b pb-3">
+                <div>
+                  <h3 className="font-black text-lg text-slate-900">{viewingTutorProfile.name}</h3>
+                  <p className="text-sm font-bold" style={{ color: primaryColor }}>{viewingTutorProfile.career}</p>
+                </div>
+                <button onClick={() => setViewingTutorProfile(null)} className="p-1 hover:bg-slate-100 rounded-full"><X className="w-5 h-5 text-slate-500" /></button>
+              </div>
+
+              <div className="space-y-3.5 text-sm text-slate-700">
+                <div>
+                  <strong className="block mb-2 uppercase font-extrabold text-xs tracking-wider text-slate-500">Materias impartidas y Horarios:</strong>
+                  <div className="flex flex-col gap-2">
+                    {tutorSubjectsList.map((sub, i) => (
+                      <div key={i} className="p-3 bg-slate-50 border rounded-xl flex justify-between items-center">
+                        <span className="font-bold text-slate-900">{sub.name}</span>
+                        <span className="font-mono text-xs font-bold" style={{ color: primaryColor }}>{sub.day} ({sub.time})</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <button onClick={() => {
+                  const tutorToBook = viewingTutorProfile;
+                  setViewingTutorProfile(null);
+                  setSelectedTutorForBooking(tutorToBook);
+                }} className="w-full text-white font-bold py-3.5 rounded-xl text-sm shadow-md transition hover:opacity-90" style={{ backgroundColor: primaryColor }}>
+                  Reservar Tutoría con {viewingTutorProfile.name}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ... continuarían los demás modales: pending request, rating, notifications, chat, delete account ... */}
+    </div>
+  );
+}
