@@ -60,6 +60,7 @@ function RegisterForm({ users, careers, onRegisterSuccess, onCancel, setRegError
 
   const [showPass, setShowPass] = useState(false);
   const [showConfirmPass, setShowConfirmPass] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isConfirmTouched = form.confirmPassword.length > 0;
   const isPasswordMatch = form.password.length > 0 && form.password === form.confirmPassword;
@@ -69,15 +70,16 @@ function RegisterForm({ users, careers, onRegisterSuccess, onCancel, setRegError
     setForm(prev => ({ ...prev, [field]: cleanValue }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setRegError('');
 
     if (!form.name.trim() || form.name.length > 20) return setRegError('El nombre debe contener solo letras y máximo 20 caracteres.');
     if (!form.lastName.trim() || form.lastName.length > 20) return setRegError('El apellido debe contener solo letras y máximo 20 caracteres.');
     if (!/^\d{1,8}$/.test(form.cedula)) return setRegError('La cédula debe ser solo números y máximo 8 dígitos.');
-    if (users.some(u => u.cedula.includes(form.cedula))) return setRegError('Ya existe un usuario registrado con esta cédula en la base de datos.');
-    if (users.some(u => u.email.toLowerCase() === form.email.toLowerCase())) return setRegError('El correo electrónico ya se encuentra registrado.');
+    if (users.some(u => u && u.cedula && u.cedula.replace(/\D/g, '') === form.cedula)) return setRegError('Ya existe un usuario registrado con esta cédula en la base de datos.');
+    if (users.some(u => u && u.email && u.email.toLowerCase() === form.email.toLowerCase().trim())) return setRegError('El correo electrónico ya se encuentra registrado.');
     if (form.email.length > 50) return setRegError('El correo electrónico no puede superar los 50 caracteres.');
     if (!/^\d{7}$/.test(form.phoneNum)) return setRegError('El número de teléfono debe tener exactamente 7 dígitos numéricos.');
     if (form.address.length > 100) return setRegError('La dirección no puede superar los 100 caracteres.');
@@ -86,7 +88,7 @@ function RegisterForm({ users, careers, onRegisterSuccess, onCancel, setRegError
     const newUser = {
       id: `usr_${Date.now()}`,
       name: `${form.name.trim()} ${form.lastName.trim()}`,
-      email: form.email,
+      email: form.email.toLowerCase().trim(),
       password: form.password,
       role: form.role,
       status: 'active',
@@ -103,7 +105,12 @@ function RegisterForm({ users, careers, onRegisterSuccess, onCancel, setRegError
       } : {})
     };
 
-    onRegisterSuccess(newUser);
+    setIsSubmitting(true);
+    try {
+      await onRegisterSuccess(newUser);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -195,8 +202,12 @@ function RegisterForm({ users, careers, onRegisterSuccess, onCancel, setRegError
           </select>
         </div>
 
-        <button type="submit" className="w-full text-white font-black py-4 rounded-2xl text-sm shadow-xl transition hover:opacity-90" style={{ backgroundColor: primaryColor }}>
-          Registrarse y Acceder
+        <button type="submit" disabled={isSubmitting} className="w-full text-white font-black py-4 rounded-2xl text-sm shadow-xl transition hover:opacity-90 disabled:opacity-60 flex items-center justify-center space-x-2" style={{ backgroundColor: primaryColor }}>
+          {isSubmitting ? (
+            <span>Registrando en la nube...</span>
+          ) : (
+            <span>Registrarse y Acceder</span>
+          )}
         </button>
       </form>
 
@@ -212,14 +223,15 @@ function RegisterForm({ users, careers, onRegisterSuccess, onCancel, setRegError
 // Mapeadores para compatibilidad entre el Frontend y el esquema de Supabase
 const mapUserFromDB = (u) => {
   if (!u) return null;
+  const detailed = Array.isArray(u.subjects_detailed) ? u.subjects_detailed : (Array.isArray(u.subjectsDetailed) ? u.subjectsDetailed : []);
   return {
     ...u,
     primaryColor: u.primary_color || u.primaryColor || '#2563eb',
     createdAt: u.created_at || u.createdAt || '',
-    subjectsDetailed: u.subjects_detailed || u.subjectsDetailed || [],
+    subjectsDetailed: detailed,
     subjects: Array.isArray(u.subjects) && u.subjects.length > 0 
       ? u.subjects 
-      : ((u.subjects_detailed || u.subjectsDetailed || []).map(s => s.name))
+      : Array.from(new Set(detailed.map(s => s.name)))
   };
 };
 
@@ -297,23 +309,20 @@ const mapNotifToDB = (n) => ({
 });
 
 export default function App() {
-  const [users, setUsers] = useState(() => {
-    const saved = localStorage.getItem('aura_users');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch (e) {}
+  const [users, setUsers] = useState(INITIAL_USERS);
+  const [sessions, setSessions] = useState(INITIAL_SESSIONS);
+  const [careers, setCareers] = useState(INITIAL_CAREERS);
+  const [reviews, setReviews] = useState(INITIAL_REVIEWS);
+  const [audits, setAudits] = useState(INITIAL_AUDITS);
+  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('aura_active_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      return null;
     }
-    return INITIAL_USERS;
   });
-
-  const [sessions, setSessions] = useState(() => JSON.parse(localStorage.getItem('aura_sessions')) || INITIAL_SESSIONS);
-  const [careers, setCareers] = useState(() => JSON.parse(localStorage.getItem('aura_careers')) || INITIAL_CAREERS);
-  const [reviews, setReviews] = useState(() => JSON.parse(localStorage.getItem('aura_reviews')) || INITIAL_REVIEWS);
-  const [audits, setAudits] = useState(() => JSON.parse(localStorage.getItem('aura_audits')) || INITIAL_AUDITS);
-  const [notifications, setNotifications] = useState(() => JSON.parse(localStorage.getItem('aura_notifications')) || INITIAL_NOTIFICATIONS);
-  const [currentUser, setCurrentUser] = useState(() => JSON.parse(localStorage.getItem('aura_active_user')) || null);
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [toast, setToast] = useState(null);
@@ -379,6 +388,11 @@ export default function App() {
   const [filterReviewRating, setFilterReviewRating] = useState('');
   const [viewingTutorProfile, setViewingTutorProfile] = useState(null);
 
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
   // Cargar datos desde Supabase
   const loadDataFromSupabase = async (isInitial = false) => {
     try {
@@ -394,23 +408,33 @@ export default function App() {
         supabase.from('sessions').select('*'),
         supabase.from('careers').select('*'),
         supabase.from('reviews').select('*'),
-        supabase.from('audits').select('*'),
-        supabase.from('notifications').select('*')
+        supabase.from('audits').select('*').order('timestamp', { ascending: false }),
+        supabase.from('notifications').select('*').order('created_at', { ascending: false })
       ]);
 
       if (usersData && usersData.length > 0) {
         const mappedUsers = usersData.map(mapUserFromDB);
         setUsers(mappedUsers);
-        // Sincronizar únicamente en la carga inicial si hay una sesión guardada
-        if (isInitial) {
-          const savedActive = localStorage.getItem('aura_active_user');
-          if (savedActive) {
-            try {
-              const activeObj = JSON.parse(savedActive);
-              const fresh = mappedUsers.find(u => u.id === activeObj.id);
-              if (fresh) setCurrentUser(fresh);
-            } catch (e) {}
-          }
+
+        const savedActive = localStorage.getItem('aura_active_user');
+        if (savedActive) {
+          try {
+            const activeObj = JSON.parse(savedActive);
+            const fresh = mappedUsers.find(u => u.id === activeObj.id);
+            if (fresh) {
+              if (fresh.status !== 'active') {
+                setCurrentUser(null);
+                localStorage.removeItem('aura_active_user');
+              } else if (isInitial) {
+                setCurrentUser(fresh);
+                localStorage.setItem('aura_active_user', JSON.stringify(fresh));
+              }
+            } else if (isInitial) {
+              // Usuario antiguo en localStorage que ya no existe en la BD
+              setCurrentUser(null);
+              localStorage.removeItem('aura_active_user');
+            }
+          } catch (e) {}
         }
       }
       if (sessionsData) setSessions(sessionsData.map(mapSessionFromDB));
@@ -424,26 +448,48 @@ export default function App() {
   };
 
   useEffect(() => {
+    // Limpiar claves antiguas de localStorage para usar exclusivamente Supabase
+    ['aura_users', 'aura_sessions', 'aura_careers', 'aura_reviews', 'aura_audits', 'aura_notifications'].forEach(k => localStorage.removeItem(k));
+
     loadDataFromSupabase(true);
 
-    // Escuchar cambios en tiempo real desde Supabase para sincronizar entre diferentes dispositivos
-    const channel = supabase.channel('aura_db_changes')
-      .on('postgres_changes', { event: '*', schema: 'public' }, () => {
-        loadDataFromSupabase(false);
-      })
-      .subscribe();
+    // Refrescar al volver a enfocar la ventana o pestaña (por ejemplo al cambiar entre PC y celular)
+    const handleFocus = () => {
+      loadDataFromSupabase(false);
+    };
+    window.addEventListener('focus', handleFocus);
+
+    // Refresco periódico cada 10 segundos para mantener sincronizada la aplicación
+    const interval = setInterval(() => {
+      loadDataFromSupabase(false);
+    }, 10000);
 
     return () => {
-      supabase.removeChannel(channel);
+      window.removeEventListener('focus', handleFocus);
+      clearInterval(interval);
     };
   }, []);
 
-  // Función dedicada para actualizar datos del usuario sin causar bucles infinitos
-  const updateUserInDB = (updatedUser) => {
+  // Función dedicada para actualizar datos del usuario en la base de datos
+  const updateUserInDB = async (updatedUser, successMsg = 'Cambios sincronizados con la base de datos') => {
     setCurrentUser(updatedUser);
     setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
     localStorage.setItem('aura_active_user', JSON.stringify(updatedUser));
-    supabase.from('users').upsert(mapUserToDB(updatedUser)).catch(e => console.error('Error guardando usuario:', e));
+    
+    try {
+      const { error } = await supabase.from('users').upsert(mapUserToDB(updatedUser));
+      if (error) {
+        showToast('Error al actualizar en la base de datos: ' + error.message, 'danger');
+        return false;
+      } else {
+        if (successMsg) showToast(successMsg, 'success');
+        return true;
+      }
+    } catch (err) {
+      console.error('Error en updateUserInDB:', err);
+      showToast('Error de conexión con la base de datos', 'danger');
+      return false;
+    }
   };
 
   useEffect(() => {
@@ -454,7 +500,7 @@ export default function App() {
     }
   }, [currentUser]);
 
-  const logAudit = (userName, action, details) => {
+  const logAudit = async (userName, action, details) => {
     const newAudit = {
       id: `aud_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
       timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
@@ -463,10 +509,15 @@ export default function App() {
       details
     };
     setAudits(prev => [newAudit, ...prev]);
-    supabase.from('audits').insert([mapAuditToDB(newAudit)]).catch(e => console.error('Error guardando auditoría:', e));
+    try {
+      const { error } = await supabase.from('audits').insert([mapAuditToDB(newAudit)]);
+      if (error) console.error('Error guardando auditoría:', error);
+    } catch (e) {
+      console.error('Error guardando auditoría:', e);
+    }
   };
 
-  const addNotification = (userId, title, text, sessionId = null, type = 'general') => {
+  const addNotification = async (userId, title, text, sessionId = null, type = 'general') => {
     const newNotif = {
       id: `not_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
       userId,
@@ -478,12 +529,12 @@ export default function App() {
       read: false
     };
     setNotifications(prev => [newNotif, ...prev]);
-    supabase.from('notifications').insert([mapNotifToDB(newNotif)]).catch(e => console.error('Error guardando notificación:', e));
-  };
-
-  const showToast = (message, type = 'success') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
+    try {
+      const { error } = await supabase.from('notifications').insert([mapNotifToDB(newNotif)]);
+      if (error) console.error('Error guardando notificación:', error);
+    } catch (e) {
+      console.error('Error guardando notificación:', e);
+    }
   };
 
   const handleLogin = async (e) => {
@@ -491,20 +542,22 @@ export default function App() {
     setLoginError('');
     const cleanEmail = loginEmail.toLowerCase().trim();
 
-    // Buscar primero en el estado cargado
-    let targetUser = users.find(u => u.email.toLowerCase() === cleanEmail);
+    let targetUser = null;
 
-    // Si aún no está en memoria, consultar directamente a Supabase
-    if (!targetUser) {
-      try {
-        const { data } = await supabase.from('users').select('*').eq('email', cleanEmail).maybeSingle();
-        if (data) {
-          targetUser = mapUserFromDB(data);
-          setUsers(prev => [...prev.filter(u => u.id !== targetUser.id), targetUser]);
-        }
-      } catch (err) {
-        console.error('Error verificando usuario en Supabase:', err);
+    // Consultar primero directamente en Supabase para garantizar datos frescos desde cualquier dispositivo
+    try {
+      const { data } = await supabase.from('users').select('*').ilike('email', cleanEmail).maybeSingle();
+      if (data) {
+        targetUser = mapUserFromDB(data);
+        setUsers(prev => [...prev.filter(u => u.id !== targetUser.id), targetUser]);
       }
+    } catch (err) {
+      console.error('Error verificando usuario en Supabase:', err);
+    }
+
+    // Fallback al estado en memoria si hubo algún detalle de red
+    if (!targetUser) {
+      targetUser = users.find(u => u.email && u.email.toLowerCase() === cleanEmail);
     }
 
     if (!targetUser) return setLoginError('Correo no registrado.');
@@ -515,7 +568,8 @@ export default function App() {
     setActiveTab('dashboard');
     setLoginEmail('');
     setLoginPassword('');
-    logAudit(targetUser.name, 'INICIO DE SESIÓN', `Acceso al sistema con rol ${targetUser.role}`);
+    loadDataFromSupabase(false);
+    await logAudit(targetUser.name, 'INICIO DE SESIÓN', `Acceso al sistema con rol ${targetUser.role}`);
     showToast(`¡Bienvenido, ${targetUser.role === 'admin' ? 'Admin Global' : targetUser.name}!`);
   };
 
@@ -528,7 +582,7 @@ export default function App() {
       }
       setUsers(prev => [...prev, newUser]);
       setAuthView('login');
-      logAudit(newUser.name, 'REGISTRO EXITOSO', `Cuenta creada y activada (${newUser.email})`);
+      await logAudit(newUser.name, 'REGISTRO EXITOSO', `Cuenta creada y activada (${newUser.email})`);
       showToast('¡Registro exitoso! Ya puedes iniciar sesión con tus datos.');
     } catch (e) {
       console.error(e);
@@ -536,12 +590,22 @@ export default function App() {
     }
   };
 
-  const handleLogout = () => {
-    if (currentUser) {
-      logAudit(currentUser.name, 'CIERRE DE SESIÓN', 'El usuario salió del sistema');
-    }
+  const handleLogout = async () => {
+    const userName = currentUser?.name;
     setCurrentUser(null);
+    localStorage.removeItem('aura_active_user');
+    setActiveTab('dashboard');
+    setShowNotificationsModal(false);
+    setActiveChatSession(null);
+    setViewingTutorProfile(null);
+    setSelectedTutorForBooking(null);
+    setPendingRequestToReview(null);
+    setSessionToRate(null);
+    setShowDeleteModal(false);
     showToast('Has cerrado sesión correctamente');
+    if (userName) {
+      await logAudit(userName, 'CIERRE DE SESIÓN', 'El usuario salió del sistema');
+    }
   };
 
   const handleDeleteAccount = async () => {
@@ -553,19 +617,26 @@ export default function App() {
     const userName = currentUser.name;
     const userEmail = currentUser.email;
 
-    logAudit(userName, 'ELIMINACIÓN DE CUENTA', `El usuario eliminó permanentemente su cuenta (${userEmail})`);
-    
-    await supabase.from('users').delete().eq('id', userId);
-
-    const updatedUsers = users.filter(u => u.id !== userId);
-    setUsers(updatedUsers);
-    setCurrentUser(null);
-    setShowDeleteModal(false);
-    setDeleteConfirmText('');
-    showToast('Tu cuenta ha sido eliminada por completo del sistema.');
+    try {
+      const { error } = await supabase.from('users').delete().eq('id', userId);
+      if (error) {
+        showToast('Error al eliminar cuenta en la base de datos: ' + error.message, 'danger');
+        return;
+      }
+      await logAudit(userName, 'ELIMINACIÓN DE CUENTA', `El usuario eliminó permanentemente su cuenta (${userEmail})`);
+      setUsers(prev => prev.filter(u => u.id !== userId));
+      setCurrentUser(null);
+      localStorage.removeItem('aura_active_user');
+      setShowDeleteModal(false);
+      setDeleteConfirmText('');
+      showToast('Tu cuenta ha sido eliminada por completo del sistema.');
+    } catch (e) {
+      console.error('Error eliminando cuenta:', e);
+      showToast('Error de conexión al eliminar la cuenta', 'danger');
+    }
   };
 
-  const handleToggleUserRole = () => {
+  const handleToggleUserRole = async () => {
     const newRole = currentUser.role === 'student' ? 'tutor' : 'student';
     const updated = {
       ...currentUser,
@@ -575,12 +646,13 @@ export default function App() {
         subjectsDetailed: currentUser.subjectsDetailed || [] 
       } : {})
     };
-    updateUserInDB(updated);
-    logAudit(updated.name, 'CAMBIO DE ROL', `Usuario cambió su rol a ${newRole}`);
-    showToast(`¡Rol actualizado a ${newRole === 'tutor' ? 'Tutor Docente' : 'Estudiante'}!`);
+    const ok = await updateUserInDB(updated, `¡Rol actualizado a ${newRole === 'tutor' ? 'Tutor Docente' : 'Estudiante'}!`);
+    if (ok) {
+      await logAudit(updated.name, 'CAMBIO DE ROL', `Usuario cambió su rol a ${newRole}`);
+    }
   };
 
-  const handleSaveProfileDetails = (e) => {
+  const handleSaveProfileDetails = async (e) => {
     e.preventDefault();
     if (!profileEditForm.name.trim()) return showToast('El nombre no puede estar vacío.', 'danger');
     if (!profileEditForm.email.trim()) return showToast('El correo no puede estar vacío.', 'danger');
@@ -595,20 +667,22 @@ export default function App() {
       career: profileEditForm.career
     };
 
-    updateUserInDB(updated);
-    logAudit(updated.name, 'ACTUALIZACIÓN DE PERFIL', 'Se modificaron los datos personales de la cuenta');
-    showToast('¡Datos personales actualizados correctamente!');
+    const ok = await updateUserInDB(updated, '¡Datos personales actualizados correctamente!');
+    if (ok) {
+      await logAudit(updated.name, 'ACTUALIZACIÓN DE PERFIL', 'Se modificaron los datos personales de la cuenta');
+    }
   };
 
   const handleAvatarUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = () => {
+      reader.onloadend = async () => {
         const updated = { ...currentUser, avatar: reader.result };
-        updateUserInDB(updated);
-        logAudit(currentUser.name, 'ACTUALIZACIÓN DE FOTO', 'Se cargó una nueva imagen de perfil');
-        showToast('Foto de perfil actualizada con éxito');
+        const ok = await updateUserInDB(updated, 'Foto de perfil actualizada con éxito');
+        if (ok) {
+          await logAudit(currentUser.name, 'ACTUALIZACIÓN DE FOTO', 'Se cargó una nueva imagen de perfil');
+        }
       };
       reader.readAsDataURL(file);
     }
@@ -641,22 +715,34 @@ export default function App() {
       chat: []
     };
 
-    setSessions(prev => [...prev, newSession]);
-    supabase.from('sessions').insert([mapSessionToDB(newSession)]).catch(err => console.error('Error guardando sesión:', err));
+    try {
+      const { error } = await supabase.from('sessions').insert([mapSessionToDB(newSession)]);
+      if (error) {
+        showToast('Error al guardar la tutoría en base de datos: ' + error.message, 'danger');
+        return;
+      }
+      setSessions(prev => [...prev, newSession]);
 
-    addNotification(
-      selectedTutorForBooking.id,
-      'Nueva Solicitud de Tutoría',
-      `${currentUser.name} solicitó una clase de ${bookingSubject}. Haz clic para revisar su perfil y responder.`,
-      newSessionId,
-      'booking_request'
-    );
-    setSelectedTutorForBooking(null);
-    setBookingDate('');
-    setBookingTime('');
-    setBookingSubject('');
-    logAudit(currentUser.name, 'RESERVA DE TUTORÍA', `Solicitud de clase de ${bookingSubject} con ${selectedTutorForBooking.name} para el ${bookingDate}`);
-    showToast('Tutoría solicitada con éxito. Estado Pendiente.');
+      const tutorId = selectedTutorForBooking.id;
+      const tutorName = selectedTutorForBooking.name;
+      setSelectedTutorForBooking(null);
+      setBookingDate('');
+      setBookingTime('');
+      setBookingSubject('');
+
+      await addNotification(
+        tutorId,
+        'Nueva Solicitud de Tutoría',
+        `${currentUser.name} solicitó una clase de ${bookingSubject}. Haz clic para revisar su perfil y responder.`,
+        newSessionId,
+        'booking_request'
+      );
+      await logAudit(currentUser.name, 'RESERVA DE TUTORÍA', `Solicitud de clase de ${bookingSubject} con ${tutorName} para el ${bookingDate}`);
+      showToast('Tutoría solicitada con éxito. Estado Pendiente.');
+    } catch (err) {
+      console.error('Error guardando sesión:', err);
+      showToast('Error de conexión al reservar la tutoría', 'danger');
+    }
   };
 
   const handleSendChatMessage = async (e) => {
@@ -677,7 +763,12 @@ export default function App() {
     setActiveChatSession({ ...activeChatSession, chat: newChat });
     setChatMessageText('');
 
-    supabase.from('sessions').update({ chat: newChat }).eq('id', activeChatSession.id).catch(e => console.error(e));
+    try {
+      const { error } = await supabase.from('sessions').update({ chat: newChat }).eq('id', activeChatSession.id);
+      if (error) console.error('Error guardando mensaje de chat:', error);
+    } catch (err) {
+      console.error('Error guardando mensaje de chat:', err);
+    }
   };
 
   const handleRatingSubmit = async (e) => {
@@ -696,25 +787,36 @@ export default function App() {
       status: 'approved'
     };
 
-    setReviews([newReview, ...reviews]);
-    setSessions(sessions.map(s => s.id === sessionToRate.id ? { ...s, status: 'completed' } : s));
-    
-    supabase.from('reviews').insert([newReview]).catch(e => console.error(e));
-    supabase.from('sessions').update({ status: 'completed' }).eq('id', sessionToRate.id).catch(e => console.error(e));
+    const ratedSessionId = sessionToRate.id;
+    const ratedTutorName = sessionToRate.tutorName;
 
-    logAudit(currentUser.name, 'VALORACIÓN DE TUTORÍA', `Calificó con ${validRating} estrellas a ${sessionToRate.tutorName}`);
-    showToast('¡Gracias por calificar la tutoría!');
+    setReviews(prev => [newReview, ...prev]);
+    setSessions(prev => prev.map(s => s.id === ratedSessionId ? { ...s, status: 'completed' } : s));
     setSessionToRate(null);
     setRatingComment('');
     setRatingStars(5);
+
+    try {
+      await supabase.from('reviews').insert([newReview]);
+      await supabase.from('sessions').update({ status: 'completed' }).eq('id', ratedSessionId);
+      await logAudit(currentUser.name, 'VALORACIÓN DE TUTORÍA', `Calificó con ${validRating} estrellas a ${ratedTutorName}`);
+      showToast('¡Gracias por calificar la tutoría!');
+    } catch (err) {
+      console.error('Error guardando valoración:', err);
+    }
   };
 
-  const handleNotificationClick = (notif) => {
-    setNotifications(notifications.map(n => n.id === notif.id ? { ...n, read: true } : n));
-    supabase.from('notifications').update({ read: true }).eq('id', notif.id).catch(e => console.error(e));
+  const handleNotificationClick = async (notif) => {
+    setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, read: true } : n));
     setShowNotificationsModal(false);
 
-    if (notif.type === 'rate_tutor' || notif.title.includes('Califica')) {
+    try {
+      await supabase.from('notifications').update({ read: true }).eq('id', notif.id);
+    } catch (err) {
+      console.error('Error marcando notificación como leída:', err);
+    }
+
+    if (notif.type === 'rate_tutor' || (notif.title && notif.title.includes('Califica'))) {
       const targetSession = sessions.find(s => s.id === notif.sessionId) || 
                             sessions.find(s => s.studentId === currentUser.id && (s.status === 'completed' || s.status === 'confirmed'));
       if (targetSession) {
@@ -750,24 +852,38 @@ export default function App() {
     }
   };
 
-  const handleAcceptSessionRequest = (sessionObj) => {
-    const updatedSessions = sessions.map(s => s.id === sessionObj.id ? { ...s, status: 'confirmed' } : s);
-    setSessions(updatedSessions);
-    supabase.from('sessions').update({ status: 'confirmed' }).eq('id', sessionObj.id).catch(e => console.error(e));
-    addNotification(sessionObj.studentId, 'Tutoría Confirmada', `Tu tutor ${currentUser.name} ha aceptado tu tutoría de ${sessionObj.subject}.`, sessionObj.id, 'general');
-    logAudit(currentUser.name, 'TUTORÍA ACEPTADA', `Aceptó la solicitud de ${sessionObj.studentName}`);
-    showToast('¡Tutoría aceptada con éxito!');
+  const handleAcceptSessionRequest = async (sessionObj) => {
+    setSessions(prev => prev.map(s => s.id === sessionObj.id ? { ...s, status: 'confirmed' } : s));
     setPendingRequestToReview(null);
+    try {
+      const { error } = await supabase.from('sessions').update({ status: 'confirmed' }).eq('id', sessionObj.id);
+      if (error) {
+        showToast('Error al actualizar en la base de datos', 'danger');
+        return;
+      }
+      await addNotification(sessionObj.studentId, 'Tutoría Confirmada', `Tu tutor ${currentUser.name} ha aceptado tu tutoría de ${sessionObj.subject}.`, sessionObj.id, 'general');
+      await logAudit(currentUser.name, 'TUTORÍA ACEPTADA', `Aceptó la solicitud de ${sessionObj.studentName}`);
+      showToast('¡Tutoría aceptada con éxito!');
+    } catch (e) {
+      console.error(e);
+    }
   };
 
-  const handleRejectSessionRequest = (sessionObj) => {
-    const updatedSessions = sessions.map(s => s.id === sessionObj.id ? { ...s, status: 'rejected' } : s);
-    setSessions(updatedSessions);
-    supabase.from('sessions').update({ status: 'rejected' }).eq('id', sessionObj.id).catch(e => console.error(e));
-    addNotification(sessionObj.studentId, 'Tutoría Rechazada', `Tu tutor ${currentUser.name} no pudo aceptar tu solicitud de ${sessionObj.subject}.`, sessionObj.id, 'general');
-    logAudit(currentUser.name, 'TUTORÍA RECHAZADA', `Rechazó la solicitud de ${sessionObj.studentName}`);
-    showToast('Solicitud de tutoría rechazada.', 'danger');
+  const handleRejectSessionRequest = async (sessionObj) => {
+    setSessions(prev => prev.map(s => s.id === sessionObj.id ? { ...s, status: 'rejected' } : s));
     setPendingRequestToReview(null);
+    try {
+      const { error } = await supabase.from('sessions').update({ status: 'rejected' }).eq('id', sessionObj.id);
+      if (error) {
+        showToast('Error al actualizar en la base de datos', 'danger');
+        return;
+      }
+      await addNotification(sessionObj.studentId, 'Tutoría Rechazada', `Tu tutor ${currentUser.name} no pudo aceptar tu solicitud de ${sessionObj.subject}.`, sessionObj.id, 'general');
+      await logAudit(currentUser.name, 'TUTORÍA RECHAZADA', `Rechazó la solicitud de ${sessionObj.studentName}`);
+      showToast('Solicitud de tutoría rechazada.', 'danger');
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const exportDataToCSV = (filename, dataArray) => {
@@ -970,12 +1086,20 @@ export default function App() {
                           </td>
                           <td className="p-3.5 text-right">
                             {u.role !== 'admin' ? (
-                              <button onClick={() => {
+                              <button onClick={async () => {
                                 const newStatus = u.status === 'active' ? 'inactive' : 'active';
-                                setUsers(users.map(x => x.id === u.id ? { ...x, status: newStatus } : x));
-                                supabase.from('users').update({ status: newStatus }).eq('id', u.id).catch(e => console.error(e));
-                                logAudit(currentUser.name, 'CAMBIO DE ESTADO', `Se cambió estado de ${u.name} a ${newStatus}`);
-                                showToast(`Usuario ${newStatus === 'active' ? 'activado' : 'suspendido'} con éxito`);
+                                setUsers(prev => prev.map(x => x.id === u.id ? { ...x, status: newStatus } : x));
+                                try {
+                                  const { error } = await supabase.from('users').update({ status: newStatus }).eq('id', u.id);
+                                  if (error) {
+                                    showToast('Error al actualizar estado en BD: ' + error.message, 'danger');
+                                    return;
+                                  }
+                                  await logAudit(currentUser.name, 'CAMBIO DE ESTADO', `Se cambió estado de ${u.name} a ${newStatus}`);
+                                  showToast(`Usuario ${newStatus === 'active' ? 'activado' : 'suspendido'} con éxito`);
+                                } catch (e) {
+                                  console.error(e);
+                                }
                               }} className="font-bold px-3.5 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl">Modificar Estado</button>
                             ) : (
                               <span className="text-sm text-slate-400 italic">Protegido</span>
@@ -1120,14 +1244,22 @@ export default function App() {
                         <label className="block text-xs font-bold uppercase text-slate-600 mb-1.5">Código</label>
                         <input type="text" placeholder="Ej. ISW" value={newCareerCode} onChange={e => setNewCareerCode(e.target.value)} className="w-full p-3 border rounded-xl text-sm" />
                       </div>
-                      <button onClick={() => {
+                      <button onClick={async () => {
                         if (!newCareerName || !newCareerCode) return showToast('Completa los campos', 'danger');
-                        const newCar = { id: `car_${Date.now()}`, code: newCareerCode, name: newCareerName };
-                        setCareers([...careers, newCar]);
-                        supabase.from('careers').insert([newCar]).catch(e => console.error(e));
-                        setNewCareerName(''); setNewCareerCode('');
-                        logAudit(currentUser.name, 'CARRERA AÑADIDA', `Nueva carrera: ${newCareerName}`);
-                        showToast('Carrera actualizada con éxito');
+                        const newCar = { id: `car_${Date.now()}`, code: newCareerCode.trim(), name: newCareerName.trim() };
+                        try {
+                          const { error } = await supabase.from('careers').insert([newCar]);
+                          if (error) {
+                            showToast('Error al guardar carrera en BD: ' + error.message, 'danger');
+                            return;
+                          }
+                          setCareers(prev => [...prev, newCar]);
+                          setNewCareerName(''); setNewCareerCode('');
+                          await logAudit(currentUser.name, 'CARRERA AÑADIDA', `Nueva carrera: ${newCar.name}`);
+                          showToast('Carrera actualizada con éxito');
+                        } catch (e) {
+                          console.error(e);
+                        }
                       }} className="w-full text-white font-bold py-3 rounded-xl text-sm shadow-md transition hover:opacity-90" style={{ backgroundColor: primaryColor }}>Agregar Carrera</button>
                     </div>
                   </div>
@@ -1187,11 +1319,15 @@ export default function App() {
                             </span>
                           </td>
                           <td className="p-3.5 text-right space-x-2">
-                            <button onClick={() => {
-                              setReviews(reviews.filter(item => item.id !== r.id));
-                              supabase.from('reviews').delete().eq('id', r.id).catch(e => console.error(e));
-                              logAudit(currentUser.name, 'RESEÑA ELIMINADA', `Se eliminó opinión de ${r.author}`);
-                              showToast('Publicación eliminada con éxito');
+                            <button onClick={async () => {
+                              setReviews(prev => prev.filter(item => item.id !== r.id));
+                              try {
+                                await supabase.from('reviews').delete().eq('id', r.id);
+                                await logAudit(currentUser.name, 'RESEÑA ELIMINADA', `Se eliminó opinión de ${r.author}`);
+                                showToast('Publicación eliminada con éxito');
+                              } catch (e) {
+                                console.error(e);
+                              }
                             }} className="px-3.5 py-1.5 bg-red-600 text-white font-bold rounded-xl text-sm">Eliminar Opinión</button>
                           </td>
                         </tr>
@@ -1347,10 +1483,14 @@ export default function App() {
                         <Download className="w-4.5 h-4.5" /> 
                         <span>Exportar Bitácora CSV</span>
                       </button>
-                      <button onClick={() => { 
+                      <button onClick={async () => { 
                         setAudits([]); 
-                        supabase.from('audits').delete().neq('id', '0').catch(e => console.error(e));
-                        showToast('Bitácora de auditoría limpia', 'success'); 
+                        try {
+                          await supabase.from('audits').delete().neq('id', '0');
+                          showToast('Bitácora de auditoría limpia', 'success');
+                        } catch (e) {
+                          console.error(e);
+                        }
                       }} className="text-sm font-bold px-3.5 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-700">
                         Limpiar Bitácora
                       </button>
@@ -1535,7 +1675,7 @@ export default function App() {
                         {EXTENDED_COLOR_PALETTE.map((hex) => (
                           <button 
                             key={hex} 
-                            onClick={() => updateUserInDB({ ...currentUser, primaryColor: hex })} 
+                            onClick={() => updateUserInDB({ ...currentUser, primaryColor: hex }, 'Color del sistema actualizado')} 
                             className={`w-10 h-10 rounded-2xl border-2 transition hover:scale-110 shadow-sm ${primaryColor === hex ? 'ring-2 ring-offset-2 ring-slate-900 scale-110' : 'border-white'}`} 
                             style={{ backgroundColor: hex }} 
                             title={hex}
@@ -1598,7 +1738,7 @@ export default function App() {
                         </div>
                       </div>
 
-                      <button onClick={() => {
+                      <button onClick={async () => {
                         if (!newSubjectName.trim()) return showToast('Escribe el nombre de la materia', 'danger');
                         const formattedTimeString = `${newSubjectHour}:${newSubjectMinute} ${newSubjectAmpm}`;
                         const currentDetailed = currentUser.subjectsDetailed || [];
@@ -1609,14 +1749,16 @@ export default function App() {
                           return;
                         }
 
-                        const newSubItem = { id: `sub_${Date.now()}`, career: newSubjectCareer, name: newSubjectName.trim(), day: newSubjectDay, time: formattedTimeString };
+                        const addedName = newSubjectName.trim();
+                        const newSubItem = { id: `sub_${Date.now()}`, career: newSubjectCareer, name: addedName, day: newSubjectDay, time: formattedTimeString };
                         const updatedDetailed = [...currentDetailed, newSubItem];
                         const updatedSubjectsNames = Array.from(new Set(updatedDetailed.map(i => i.name)));
 
-                        updateUserInDB({ ...currentUser, subjects: updatedSubjectsNames, subjectsDetailed: updatedDetailed });
                         setNewSubjectName('');
-                        logAudit(currentUser.name, 'MATERIA REGISTRADA', `Registró ${newSubjectName.trim()}`);
-                        showToast('¡Materia registrada con éxito!');
+                        const ok = await updateUserInDB({ ...currentUser, subjects: updatedSubjectsNames, subjectsDetailed: updatedDetailed }, '¡Materia registrada con éxito!');
+                        if (ok) {
+                          await logAudit(currentUser.name, 'MATERIA REGISTRADA', `Registró ${addedName}`);
+                        }
                       }} className="w-full text-white font-bold py-3 rounded-xl text-sm shadow-md transition hover:opacity-90" style={{ backgroundColor: primaryColor }}>
                         Registrar Materia y Horario
                       </button>
@@ -1636,12 +1778,13 @@ export default function App() {
                                   <span>{item.day} - {item.time}</span>
                                 </span>
                               </div>
-                              <button onClick={() => {
+                              <button onClick={async () => {
                                 const updatedDetailed = currentUser.subjectsDetailed.filter(x => x.id !== item.id);
                                 const updatedSubjectsNames = Array.from(new Set(updatedDetailed.map(x => x.name)));
-                                updateUserInDB({ ...currentUser, subjects: updatedSubjectsNames, subjectsDetailed: updatedDetailed });
-                                logAudit(currentUser.name, 'MATERIA ELIMINADA', `Eliminó ${item.name}`);
-                                showToast('Materia eliminada', 'danger');
+                                const ok = await updateUserInDB({ ...currentUser, subjects: updatedSubjectsNames, subjectsDetailed: updatedDetailed }, 'Materia eliminada');
+                                if (ok) {
+                                  await logAudit(currentUser.name, 'MATERIA ELIMINADA', `Eliminó ${item.name}`);
+                                }
                               }} className="text-slate-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-xl transition">
                                 <Trash2 className="w-4.5 h-4.5" />
                               </button>
@@ -1674,13 +1817,25 @@ export default function App() {
                             <td className="p-3.5 text-slate-600">{s.date} - {s.time}</td>
                             <td className="p-3.5">
                               {currentUser.role === 'tutor' && (s.status === 'pending' || s.status === 'confirmed') ? (
-                                <select value={s.status} onChange={(e) => {
+                                <select value={s.status} onChange={async (e) => {
                                   const newStatus = e.target.value;
-                                  setSessions(sessions.map(item => item.id === s.id ? { ...item, status: newStatus } : item));
-                                  if (newStatus === 'completed') {
-                                    addNotification(s.studentId, 'Tutoría Finalizada', `Tu tutor dio por finalizada la tutoría de ${s.subject}.`, s.id, 'rate_tutor');
+                                  setSessions(prev => prev.map(item => item.id === s.id ? { ...item, status: newStatus } : item));
+                                  try {
+                                    const { error } = await supabase.from('sessions').update({ status: newStatus }).eq('id', s.id);
+                                    if (error) {
+                                      showToast('Error al actualizar estado en BD: ' + error.message, 'danger');
+                                      return;
+                                    }
+                                    if (newStatus === 'completed') {
+                                      await addNotification(s.studentId, 'Tutoría Finalizada', `Tu tutor dio por finalizada la tutoría de ${s.subject}.`, s.id, 'rate_tutor');
+                                    } else if (newStatus === 'confirmed') {
+                                      await addNotification(s.studentId, 'Tutoría Confirmada', `Tu tutor ${currentUser.name} ha aceptado tu tutoría de ${s.subject}.`, s.id, 'general');
+                                    }
+                                    await logAudit(currentUser.name, 'ESTADO DE TUTORÍA', `Actualizó estado de tutoría (${s.subject}) a ${newStatus}`);
+                                    showToast(`Estado actualizado: ${newStatus}`);
+                                  } catch (err) {
+                                    console.error(err);
                                   }
-                                  showToast(`Estado actualizado: ${newStatus}`);
                                 }} className="p-2 border rounded-xl text-sm font-bold bg-white">
                                   <option value="pending">Pendiente</option>
                                   <option value="confirmed">Confirmada</option>
@@ -1957,7 +2112,7 @@ export default function App() {
               <button onClick={() => setActiveChatSession(null)}><X className="w-5 h-5 text-slate-500" /></button>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50 my-3 rounded-2xl border">
-              {(activeChatSession.chat || []).map((msg, idx) => (
+              {(sessions.find(s => s.id === activeChatSession.id)?.chat || activeChatSession.chat || []).map((msg, idx) => (
                 <div key={idx} className={`p-3.5 rounded-2xl text-sm max-w-[80%] ${msg.sender === currentUser.name ? 'ml-auto text-white' : 'mr-auto bg-white border text-slate-800'}`} style={msg.sender === currentUser.name ? { backgroundColor: primaryColor } : {}}>
                   <strong className="block text-xs opacity-85 mb-0.5">{msg.sender}</strong>
                   <span>{msg.text}</span>
@@ -1998,7 +2153,7 @@ export default function App() {
               <input type="text" disabled value={selectedTutorForBooking.name} className="w-full p-3.5 bg-slate-100 border rounded-xl font-bold text-slate-800" />
               <select value={bookingSubject} onChange={e => setBookingSubject(e.target.value)} required className="w-full p-3.5 border rounded-xl bg-white text-sm font-medium">
                 <option value="">-- Selecciona una materia --</option>
-                {selectedTutorForBooking.subjects?.map((sub, i) => <option key={i} value={sub}>{sub}</option>)}
+                {(selectedTutorForBooking.subjects?.length ? selectedTutorForBooking.subjects : Array.from(new Set((selectedTutorForBooking.subjectsDetailed || []).map(s => s.name)))).map((sub, i) => <option key={i} value={sub}>{sub}</option>)}
               </select>
               <div className="grid grid-cols-2 gap-3.5">
                 <input type="date" min={todayDateFormatted} value={bookingDate} onChange={e => setBookingDate(e.target.value)} required className="w-full p-3.5 border rounded-xl text-sm" />
