@@ -209,6 +209,93 @@ function RegisterForm({ users, careers, onRegisterSuccess, onCancel, setRegError
   );
 }
 
+// Mapeadores para compatibilidad entre el Frontend y el esquema de Supabase
+const mapUserFromDB = (u) => {
+  if (!u) return null;
+  return {
+    ...u,
+    primaryColor: u.primary_color || u.primaryColor || '#2563eb',
+    createdAt: u.created_at || u.createdAt || '',
+    subjectsDetailed: u.subjects_detailed || u.subjectsDetailed || [],
+    subjects: Array.isArray(u.subjects) && u.subjects.length > 0 
+      ? u.subjects 
+      : ((u.subjects_detailed || u.subjectsDetailed || []).map(s => s.name))
+  };
+};
+
+const mapUserToDB = (u) => ({
+  id: u.id,
+  name: u.name,
+  email: u.email,
+  password: u.password,
+  role: u.role || 'student',
+  status: u.status || 'active',
+  career: u.career || '',
+  cedula: u.cedula || '',
+  phone: u.phone || '',
+  address: u.address || '',
+  primary_color: u.primaryColor || u.primary_color || '#2563eb',
+  avatar: u.avatar || '',
+  created_at: u.createdAt || u.created_at || new Date().toISOString(),
+  subjects_detailed: u.subjectsDetailed || u.subjects_detailed || []
+});
+
+const mapSessionFromDB = (s) => ({
+  ...s,
+  studentId: s.student_id || s.studentId,
+  studentName: s.student_name || s.studentName,
+  tutorId: s.tutor_id || s.tutorId,
+  tutorName: s.tutor_name || s.tutorName,
+  chat: Array.isArray(s.chat) ? s.chat : []
+});
+
+const mapSessionToDB = (s) => ({
+  id: s.id,
+  student_id: s.studentId || s.student_id,
+  student_name: s.studentName || s.student_name,
+  tutor_id: s.tutorId || s.tutor_id,
+  tutor_name: s.tutorName || s.tutor_name,
+  subject: s.subject,
+  date: s.date,
+  time: s.time,
+  status: s.status,
+  chat: s.chat || []
+});
+
+const mapAuditFromDB = (a) => ({
+  ...a,
+  user: a.user_name || a.user || 'Sistema',
+  timestamp: a.timestamp || '',
+  action: a.action || '',
+  details: a.details || ''
+});
+
+const mapAuditToDB = (a) => ({
+  id: a.id,
+  timestamp: a.timestamp,
+  user_name: a.user || a.user_name || 'Sistema',
+  action: a.action,
+  details: a.details || ''
+});
+
+const mapNotifFromDB = (n) => ({
+  ...n,
+  userId: n.user_id || n.userId,
+  sessionId: n.session_id || n.sessionId,
+  read: n.read ?? false
+});
+
+const mapNotifToDB = (n) => ({
+  id: n.id,
+  user_id: n.userId || n.user_id,
+  title: n.title,
+  text: n.text,
+  session_id: n.sessionId || n.session_id || null,
+  type: n.type || 'general',
+  time: n.time || 'Justo ahora',
+  read: n.read ?? false
+});
+
 export default function App() {
   const [users, setUsers] = useState(() => {
     const saved = localStorage.getItem('aura_users');
@@ -312,22 +399,23 @@ export default function App() {
       ]);
 
       if (usersData && usersData.length > 0) {
-        setUsers(usersData);
+        const mappedUsers = usersData.map(mapUserFromDB);
+        setUsers(mappedUsers);
         // Sincronizar el usuario logueado con sus datos más recientes
         const savedActive = localStorage.getItem('aura_active_user');
         if (savedActive) {
           try {
             const activeObj = JSON.parse(savedActive);
-            const fresh = usersData.find(u => u.id === activeObj.id);
+            const fresh = mappedUsers.find(u => u.id === activeObj.id);
             if (fresh) setCurrentUser(fresh);
           } catch (e) {}
         }
       }
-      if (sessionsData) setSessions(sessionsData);
+      if (sessionsData) setSessions(sessionsData.map(mapSessionFromDB));
       if (careersData && careersData.length > 0) setCareers(careersData);
       if (reviewsData) setReviews(reviewsData);
-      if (auditsData) setAudits(auditsData);
-      if (notifsData) setNotifications(notifsData);
+      if (auditsData) setAudits(auditsData.map(mapAuditFromDB));
+      if (notifsData) setNotifications(notifsData.map(mapNotifFromDB));
     } catch (e) {
       console.error('Error al sincronizar con Supabase:', e);
     }
@@ -353,7 +441,7 @@ export default function App() {
       localStorage.setItem('aura_active_user', JSON.stringify(currentUser));
       setUsers(prevUsers => prevUsers.map(u => u.id === currentUser.id ? currentUser : u));
       // Guardar cambios del perfil / materias / color en Supabase
-      supabase.from('users').upsert(currentUser).catch(err => console.error('Error guardando usuario en Supabase:', err));
+      supabase.from('users').upsert(mapUserToDB(currentUser)).catch(err => console.error('Error guardando usuario en Supabase:', err));
     } else {
       localStorage.removeItem('aura_active_user');
     }
@@ -368,7 +456,7 @@ export default function App() {
       details
     };
     setAudits(prev => [newAudit, ...prev]);
-    supabase.from('audits').insert([newAudit]).catch(e => console.error('Error guardando auditoría:', e));
+    supabase.from('audits').insert([mapAuditToDB(newAudit)]).catch(e => console.error('Error guardando auditoría:', e));
   };
 
   const addNotification = (userId, title, text, sessionId = null, type = 'general') => {
@@ -383,7 +471,7 @@ export default function App() {
       read: false
     };
     setNotifications(prev => [newNotif, ...prev]);
-    supabase.from('notifications').insert([newNotif]).catch(e => console.error('Error guardando notificación:', e));
+    supabase.from('notifications').insert([mapNotifToDB(newNotif)]).catch(e => console.error('Error guardando notificación:', e));
   };
 
   const showToast = (message, type = 'success') => {
@@ -410,7 +498,7 @@ export default function App() {
 
   const handleRegisterSuccess = async (newUser) => {
     try {
-      const { error } = await supabase.from('users').insert([newUser]);
+      const { error } = await supabase.from('users').insert([mapUserToDB(newUser)]);
       if (error) {
         showToast('Error al registrar en base de datos: ' + error.message, 'danger');
         return;
@@ -531,7 +619,7 @@ export default function App() {
     };
 
     setSessions(prev => [...prev, newSession]);
-    supabase.from('sessions').insert([newSession]).catch(err => console.error('Error guardando sesión:', err));
+    supabase.from('sessions').insert([mapSessionToDB(newSession)]).catch(err => console.error('Error guardando sesión:', err));
 
     addNotification(
       selectedTutorForBooking.id,
@@ -681,13 +769,13 @@ export default function App() {
   const unreadNotifCount = userNotifications.filter(n => !n.read).length;
 
   const filteredAudits = audits.filter(a => 
-    a.timestamp.toLowerCase().includes(auditFilterQuery.toLowerCase().trim()) ||
-    a.user.toLowerCase().includes(auditFilterQuery.toLowerCase().trim()) ||
-    a.action.toLowerCase().includes(auditFilterQuery.toLowerCase().trim())
+    (a.timestamp || '').toLowerCase().includes(auditFilterQuery.toLowerCase().trim()) ||
+    (a.user || a.user_name || '').toLowerCase().includes(auditFilterQuery.toLowerCase().trim()) ||
+    (a.action || '').toLowerCase().includes(auditFilterQuery.toLowerCase().trim())
   );
 
   // Cálculos dinámicos excluyendo al Admin Global
-  const nonAdminUsers = users.filter(u => u.role !== 'admin');
+  const nonAdminUsers = (users || []).filter(u => u && u.role !== 'admin');
   const totalNonAdminUsersCount = nonAdminUsers.length;
   const activeStudentsCount = nonAdminUsers.filter(u => u.role === 'student').length;
   const activeTutorsCount = nonAdminUsers.filter(u => u.role === 'tutor').length;
