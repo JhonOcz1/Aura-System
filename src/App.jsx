@@ -479,10 +479,26 @@ export default function App() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setLoginError('');
-    const targetUser = users.find(u => u.email.toLowerCase() === loginEmail.toLowerCase().trim());
+    const cleanEmail = loginEmail.toLowerCase().trim();
+
+    // Buscar primero en el estado cargado
+    let targetUser = users.find(u => u.email.toLowerCase() === cleanEmail);
+
+    // Si aún no está en memoria, consultar directamente a Supabase
+    if (!targetUser) {
+      try {
+        const { data } = await supabase.from('users').select('*').eq('email', cleanEmail).maybeSingle();
+        if (data) {
+          targetUser = mapUserFromDB(data);
+          setUsers(prev => [...prev.filter(u => u.id !== targetUser.id), targetUser]);
+        }
+      } catch (err) {
+        console.error('Error verificando usuario en Supabase:', err);
+      }
+    }
 
     if (!targetUser) return setLoginError('Correo no registrado.');
     if (targetUser.password !== loginPassword) return setLoginError('Contraseña incorrecta.');
