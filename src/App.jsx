@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   LogOut, User, BookOpen, Settings, AlertCircle, Eye, EyeOff,
   Check, Activity, Users, MessageSquareOff, BarChart3, ShieldCheck,
   Search, Calendar, Download, Filter, Star, PieChart, Camera,
   Palette, Clock, Trash2, ShieldAlert, MessageCircle, CheckCircle,
   XCircle, KeyRound, UserPlus, Bell, X, Mail, Lock, ChevronDown, ChevronRight, Save, Edit3, FileText,
-  TrendingUp, CheckCircle2, Clock3
+  TrendingUp, CheckCircle2, Clock3, Upload, UserCheck, UserX
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -97,6 +97,48 @@ const formatAuditTimestamp = (ts) => {
     }
   }
   return ts;
+};
+
+// Parser robusto para importación de archivos CSV con soporte para comillas y saltos de línea
+const parseCSV = (text) => {
+  const lines = [];
+  let currentRow = [];
+  let currentCell = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    const nextChar = text[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        currentCell += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      currentRow.push(currentCell.trim());
+      currentCell = '';
+    } else if ((char === '\r' || char === '\n') && !inQuotes) {
+      if (char === '\r' && nextChar === '\n') i++;
+      currentRow.push(currentCell.trim());
+      if (currentRow.some(cell => cell.length > 0)) {
+        lines.push(currentRow);
+      }
+      currentRow = [];
+      currentCell = '';
+    } else {
+      currentCell += char;
+    }
+  }
+  if (currentCell.length > 0 || currentRow.length > 0) {
+    currentRow.push(currentCell.trim());
+    if (currentRow.some(cell => cell.length > 0)) {
+      lines.push(currentRow);
+    }
+  }
+  return lines;
 };
 
 const EXTENDED_COLOR_PALETTE = [
@@ -445,6 +487,21 @@ export default function App() {
   const [filterReviewRating, setFilterReviewRating] = useState('');
   const [viewingTutorProfile, setViewingTutorProfile] = useState(null);
 
+  // Estados para Gestión y Creación/Edición/Eliminación de Usuarios por Administrador
+  const [showCreateUserModal, setShowCreateUserModal] = useState(false);
+  const [editingUserByAdmin, setEditingUserByAdmin] = useState(null);
+  const [userToDeleteByAdmin, setUserToDeleteByAdmin] = useState(null);
+  const csvImportInputRef = useRef(null);
+
+  const [adminCreateForm, setAdminCreateForm] = useState({
+    name: '', lastName: '', cedula: '', email: '', password: '', confirmPassword: '',
+    prefix: '0412', phoneNum: '', address: '', career: 'Informática', role: 'student'
+  });
+  const [adminCreateShowPass, setAdminCreateShowPass] = useState(false);
+  const [adminCreateShowConfirmPass, setAdminCreateShowConfirmPass] = useState(false);
+  const [adminCreateError, setAdminCreateError] = useState('');
+  const [adminCreateSubmitting, setAdminCreateSubmitting] = useState(false);
+
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
@@ -691,6 +748,274 @@ export default function App() {
       console.error('Error eliminando cuenta:', e);
       showToast('Error de conexión al eliminar la cuenta', 'danger');
     }
+  };
+
+  // Handlers para Administración de Usuarios (Crear, Editar, Eliminar, Importar CSV)
+  const handleToggleUserStatus = async (userObj) => {
+    const newStatus = userObj.status === 'active' ? 'inactive' : 'active';
+    setUsers(prev => prev.map(x => x.id === userObj.id ? { ...x, status: newStatus } : x));
+    try {
+      const { error } = await supabase.from('users').update({ status: newStatus }).eq('id', userObj.id);
+      if (error) {
+        showToast('Error al actualizar estado en BD: ' + error.message, 'danger');
+        return;
+      }
+      await logAudit(currentUser.name, 'CAMBIO DE ESTADO', `Se cambió estado de ${userObj.name} a ${newStatus}`);
+      showToast(`Usuario ${newStatus === 'active' ? 'activado' : 'suspendido'} con éxito`);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleAdminCreateUser = async (e) => {
+    e.preventDefault();
+    if (adminCreateSubmitting) return;
+    setAdminCreateError('');
+
+    if (!adminCreateForm.name.trim() || adminCreateForm.name.length > 20) {
+      return setAdminCreateError('El nombre debe contener solo letras y máximo 20 caracteres.');
+    }
+    if (!adminCreateForm.lastName.trim() || adminCreateForm.lastName.length > 20) {
+      return setAdminCreateError('El apellido debe contener solo letras y máximo 20 caracteres.');
+    }
+    if (!/^\d{1,8}$/.test(adminCreateForm.cedula)) {
+      return setAdminCreateError('La cédula debe ser solo números y máximo 8 dígitos.');
+    }
+    if (users.some(u => u && u.cedula && u.cedula.replace(/\D/g, '') === adminCreateForm.cedula)) {
+      return setAdminCreateError('Ya existe un usuario registrado con esta cédula en la base de datos.');
+    }
+    if (users.some(u => u && u.email && u.email.toLowerCase() === adminCreateForm.email.toLowerCase().trim())) {
+      return setAdminCreateError('El correo electrónico ya se encuentra registrado.');
+    }
+    if (adminCreateForm.email.length > 50) {
+      return setAdminCreateError('El correo electrónico no puede superar los 50 caracteres.');
+    }
+    if (!/^\d{7}$/.test(adminCreateForm.phoneNum)) {
+      return setAdminCreateError('El número de teléfono debe tener exactamente 7 dígitos numéricos.');
+    }
+    if (adminCreateForm.address.length > 100) {
+      return setAdminCreateError('La dirección no puede superar los 100 caracteres.');
+    }
+    if (adminCreateForm.password !== adminCreateForm.confirmPassword) {
+      return setAdminCreateError('Las contraseñas no coinciden. Por favor verifícalas.');
+    }
+
+    const newUser = {
+      id: `usr_${Date.now()}`,
+      name: `${adminCreateForm.name.trim()} ${adminCreateForm.lastName.trim()}`,
+      email: adminCreateForm.email.toLowerCase().trim(),
+      password: adminCreateForm.password,
+      role: adminCreateForm.role,
+      status: 'active',
+      career: adminCreateForm.career,
+      cedula: `V-${adminCreateForm.cedula}`,
+      phone: `${adminCreateForm.prefix}-${adminCreateForm.phoneNum}`,
+      address: adminCreateForm.address,
+      primaryColor: '#2563eb',
+      avatar: '',
+      createdAt: getVenezuelaDateString(),
+      ...(adminCreateForm.role === 'tutor' ? { subjects: [], subjectsDetailed: [] } : {})
+    };
+
+    setAdminCreateSubmitting(true);
+    try {
+      const { error } = await supabase.from('users').insert([mapUserToDB(newUser)]);
+      if (error) {
+        setAdminCreateError('Error en base de datos: ' + error.message);
+        return;
+      }
+      setUsers(prev => [...prev, newUser]);
+      await logAudit(currentUser.name, 'CREACIÓN DE USUARIO', `Se creó cuenta para ${newUser.name} con rol ${newUser.role} (${newUser.email})`);
+      setShowCreateUserModal(false);
+      setAdminCreateForm({
+        name: '', lastName: '', cedula: '', email: '', password: '', confirmPassword: '',
+        prefix: '0412', phoneNum: '', address: '', career: 'Informática', role: 'student'
+      });
+      setAdminCreateError('');
+      showToast(`¡Usuario ${newUser.name} creado exitosamente!`, 'success');
+    } catch (err) {
+      console.error(err);
+      setAdminCreateError('Error al crear el usuario en la base de datos.');
+    } finally {
+      setAdminCreateSubmitting(false);
+    }
+  };
+
+  const handleAdminSaveUser = async (e) => {
+    e.preventDefault();
+    if (!editingUserByAdmin) return;
+    if (!editingUserByAdmin.name.trim()) return showToast('El nombre no puede estar vacío', 'danger');
+    if (!editingUserByAdmin.email.trim()) return showToast('El correo no puede estar vacío', 'danger');
+
+    try {
+      const updated = {
+        ...editingUserByAdmin,
+        name: editingUserByAdmin.name.trim(),
+        email: editingUserByAdmin.email.trim().toLowerCase(),
+        career: editingUserByAdmin.career || 'Informática',
+        role: editingUserByAdmin.role || 'student',
+        status: editingUserByAdmin.status || 'active',
+        cedula: editingUserByAdmin.cedula?.trim() || '',
+        phone: editingUserByAdmin.phone?.trim() || '',
+        address: editingUserByAdmin.address?.trim() || ''
+      };
+
+      const { error } = await supabase.from('users').update(mapUserToDB(updated)).eq('id', updated.id);
+      if (error) {
+        showToast('Error al actualizar usuario: ' + error.message, 'danger');
+        return;
+      }
+      setUsers(prev => prev.map(u => u.id === updated.id ? updated : u));
+      if (currentUser?.id === updated.id) {
+        setCurrentUser(updated);
+        localStorage.setItem('aura_active_user', JSON.stringify(updated));
+      }
+      await logAudit(currentUser.name, 'EDICIÓN DE USUARIO', `Se actualizó la información de ${updated.name} (${updated.email})`);
+      setEditingUserByAdmin(null);
+      showToast('Información de usuario actualizada correctamente', 'success');
+    } catch (err) {
+      console.error(err);
+      showToast('Error de conexión al actualizar usuario', 'danger');
+    }
+  };
+
+  const handleAdminDeleteUser = async () => {
+    if (!userToDeleteByAdmin) return;
+    if (userToDeleteByAdmin.email === 'admin@gmail.com' || userToDeleteByAdmin.id === currentUser?.id) {
+      showToast('No es posible eliminar la cuenta del Super Administrador activo', 'danger');
+      setUserToDeleteByAdmin(null);
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from('users').delete().eq('id', userToDeleteByAdmin.id);
+      if (error) {
+        showToast('Error al eliminar usuario en BD: ' + error.message, 'danger');
+        return;
+      }
+      setUsers(prev => prev.filter(u => u.id !== userToDeleteByAdmin.id));
+      await logAudit(currentUser.name, 'ELIMINACIÓN DE USUARIO', `Se eliminó permanentemente la cuenta de ${userToDeleteByAdmin.name} (${userToDeleteByAdmin.email})`);
+      setUserToDeleteByAdmin(null);
+      showToast('Usuario eliminado permanentemente del sistema', 'success');
+    } catch (err) {
+      console.error(err);
+      showToast('Error al eliminar el usuario', 'danger');
+    }
+  };
+
+  const handleImportUsersCSV = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const text = event.target?.result;
+        if (!text || typeof text !== 'string') {
+          showToast('El archivo CSV está vacío.', 'danger');
+          return;
+        }
+
+        const rows = parseCSV(text);
+        if (rows.length < 2) {
+          showToast('El archivo CSV debe contener encabezados y al menos una fila de datos.', 'danger');
+          return;
+        }
+
+        const rawHeaders = rows[0];
+        const normalizedHeaders = rawHeaders.map(h => 
+          h.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '')
+        );
+
+        const getIdx = (keys) => normalizedHeaders.findIndex(h => keys.includes(h));
+        const nameIdx = getIdx(['name', 'nombre', 'nombrecompleto']);
+        const emailIdx = getIdx(['email', 'correo', 'correoelectronico']);
+        const roleIdx = getIdx(['role', 'rol']);
+        const statusIdx = getIdx(['status', 'estado', 'estatus']);
+        const careerIdx = getIdx(['career', 'carrera']);
+        const cedulaIdx = getIdx(['cedula', 'ci', 'identificacion']);
+        const phoneIdx = getIdx(['phone', 'telefono', 'tlf', 'celular']);
+        const addressIdx = getIdx(['address', 'direccion']);
+        const passIdx = getIdx(['password', 'contrasena', 'clave']);
+        const idIdx = getIdx(['id']);
+
+        if (nameIdx === -1 || emailIdx === -1) {
+          showToast('El CSV debe incluir al menos las columnas de Nombre y Correo.', 'danger');
+          return;
+        }
+
+        const usersToUpsert = [];
+        let importedCount = 0;
+
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i];
+          if (!row || row.length === 0 || row.every(c => !c || !c.trim())) continue;
+
+          const email = (row[emailIdx] || '').toLowerCase().trim();
+          const name = (row[nameIdx] || '').trim();
+          if (!email || !name) continue;
+
+          const existingUser = users.find(u => (u.email || '').toLowerCase() === email);
+          const userId = existingUser?.id || (idIdx !== -1 && row[idIdx] ? row[idIdx].trim() : `usr_${Date.now()}_${i}`);
+          const rawRole = (roleIdx !== -1 && row[roleIdx] ? row[roleIdx].toLowerCase().trim() : (existingUser?.role || 'student'));
+          const validRole = ['admin', 'tutor', 'student'].includes(rawRole) ? rawRole : 'student';
+          const rawStatus = (statusIdx !== -1 && row[statusIdx] ? row[statusIdx].toLowerCase().trim() : (existingUser?.status || 'active'));
+          const validStatus = ['active', 'inactive'].includes(rawStatus) ? rawStatus : 'active';
+          const career = (careerIdx !== -1 && row[careerIdx] ? row[careerIdx].trim() : (existingUser?.career || 'Informática'));
+          const cedula = (cedulaIdx !== -1 && row[cedulaIdx] ? row[cedulaIdx].trim() : (existingUser?.cedula || ''));
+          const phone = (phoneIdx !== -1 && row[phoneIdx] ? row[phoneIdx].trim() : (existingUser?.phone || ''));
+          const address = (addressIdx !== -1 && row[addressIdx] ? row[addressIdx].trim() : (existingUser?.address || ''));
+          const password = (passIdx !== -1 && row[passIdx] ? row[passIdx].trim() : (existingUser?.password || '123456!'));
+
+          const userObj = {
+            id: userId,
+            name,
+            email,
+            password,
+            role: validRole,
+            status: validStatus,
+            career,
+            cedula,
+            phone,
+            address,
+            primaryColor: existingUser?.primaryColor || '#2563eb',
+            avatar: existingUser?.avatar || '',
+            createdAt: existingUser?.createdAt || getVenezuelaDateString(),
+            subjectsDetailed: existingUser?.subjectsDetailed || [],
+            subjects: existingUser?.subjects || []
+          };
+
+          usersToUpsert.push(userObj);
+          importedCount++;
+        }
+
+        if (usersToUpsert.length === 0) {
+          showToast('No se encontraron registros válidos para importar.', 'danger');
+          return;
+        }
+
+        const dbPayload = usersToUpsert.map(mapUserToDB);
+        const { error } = await supabase.from('users').upsert(dbPayload);
+        if (error) {
+          showToast('Error al guardar usuarios en la base de datos: ' + error.message, 'danger');
+          return;
+        }
+
+        setUsers(prev => {
+          const mapById = new Map(prev.map(u => [u.id, u]));
+          usersToUpsert.forEach(u => mapById.set(u.id, u));
+          return Array.from(mapById.values());
+        });
+
+        await logAudit(currentUser.name, 'IMPORTACIÓN CSV', `Se importaron ${importedCount} usuarios desde archivo CSV`);
+        showToast(`¡${importedCount} usuario(s) importado(s) y sincronizado(s) con éxito!`, 'success');
+      } catch (err) {
+        console.error('Error al importar CSV:', err);
+        showToast('Error al procesar el archivo CSV.', 'danger');
+      }
+    };
+    reader.readAsText(file);
   };
 
   const handleToggleUserRole = async () => {
@@ -1328,63 +1653,150 @@ export default function App() {
 
             {activeTab === 'admin_users' && currentUser.role === 'admin' && (
               <div className="bg-white rounded-3xl border p-6 space-y-4 shadow-sm">
-                <div className="flex justify-between items-center border-b pb-3">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b pb-3.5 gap-3">
                   <div>
                     <h2 className="text-xl font-black text-slate-800">RFADM01 - Gestión de Usuarios</h2>
+                    <p className="text-xs text-slate-500 font-medium">Administra, edita, crea e importa cuentas del sistema.</p>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <button onClick={() => exportDataToCSV('usuarios_iujo', users)} className="px-3.5 py-2 bg-slate-100 text-slate-700 font-bold text-sm rounded-xl flex items-center space-x-1.5 hover:bg-slate-200 transition">
-                      <Download className="w-4.5 h-4.5" /> <span>Exportar CSV</span>
+                  <div className="flex items-center space-x-2 flex-wrap gap-y-2">
+                    {/* Botón Crear Usuario */}
+                    <button
+                      onClick={() => {
+                        setAdminCreateError('');
+                        setShowCreateUserModal(true);
+                      }}
+                      className="px-3.5 py-2 text-white font-bold text-sm rounded-xl flex items-center space-x-1.5 shadow-sm transition hover:opacity-90"
+                      style={{ backgroundColor: primaryColor }}
+                      title="Registrar un nuevo usuario o super administrador"
+                    >
+                      <UserPlus className="w-4.5 h-4.5" />
+                      <span>Crear Usuario</span>
                     </button>
-                    <span className="px-3.5 py-2 bg-slate-100 text-slate-700 font-bold text-sm rounded-xl">Total: {users.length} usuarios</span>
+
+                    {/* Botón Importar CSV */}
+                    <input
+                      type="file"
+                      ref={csvImportInputRef}
+                      onChange={handleImportUsersCSV}
+                      accept=".csv"
+                      className="hidden"
+                    />
+                    <button
+                      onClick={() => csvImportInputRef.current?.click()}
+                      className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm rounded-xl flex items-center space-x-1.5 transition"
+                      title="Importar usuarios masivamente desde un archivo CSV"
+                    >
+                      <Upload className="w-4.5 h-4.5" />
+                      <span>Importar CSV</span>
+                    </button>
+
+                    {/* Botón Exportar CSV */}
+                    <button
+                      onClick={() => exportDataToCSV('usuarios_iujo', users)}
+                      className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm rounded-xl flex items-center space-x-1.5 transition"
+                      title="Descargar lista de usuarios en formato CSV"
+                    >
+                      <Download className="w-4.5 h-4.5" />
+                      <span>Exportar CSV</span>
+                    </button>
+
+                    <span className="px-3.5 py-2 bg-slate-100 text-slate-700 font-bold text-sm rounded-xl">
+                      Total: {users.length} usuarios
+                    </span>
                   </div>
                 </div>
+
                 <div className="overflow-x-auto border rounded-2xl">
                   <table className="w-full text-left text-sm text-slate-700">
                     <thead className="bg-slate-50 font-bold border-b text-xs uppercase text-slate-600">
-                      <tr><th className="p-3.5">Nombre</th><th className="p-3.5">Cédula / Teléfono</th><th className="p-3.5">Rol</th><th className="p-3.5">Estado</th><th className="p-3.5 text-right">Acción</th></tr>
+                      <tr>
+                        <th className="p-3.5">Nombre</th>
+                        <th className="p-3.5">Cédula / Teléfono</th>
+                        <th className="p-3.5">Rol</th>
+                        <th className="p-3.5">Estado</th>
+                        <th className="p-3.5 text-right">Acciones</th>
+                      </tr>
                     </thead>
                     <tbody className="divide-y text-sm">
                       {users.map(u => (
-                        <tr key={u.id}>
-                          <td className="p-3.5 font-semibold text-slate-900">{u.name}<span className="block text-xs text-slate-500">{u.email}</span></td>
+                        <tr key={u.id} className="hover:bg-slate-50/60 transition">
+                          <td className="p-3.5 font-semibold text-slate-900">
+                            {u.name}
+                            <span className="block text-xs text-slate-500 font-normal">{u.email}</span>
+                          </td>
 
                           <td className="p-3.5">
                             {u.role === 'admin' ? (
                               <span className="text-slate-400 italic">No aplica</span>
                             ) : (
                               <>
-                                {u.cedula} <br /><span className="text-slate-500">{u.phone}</span>
+                                <span className="font-medium text-slate-800">{u.cedula || 'Sin cédula'}</span>
+                                <br />
+                                <span className="text-xs text-slate-500">{u.phone || 'Sin teléfono'}</span>
                               </>
                             )}
                           </td>
 
-                          <td className="p-3.5 uppercase font-bold">{u.role}</td>
-                          <td className="p-3.5">
-                            <span className={`px-2.5 py-1 rounded-lg font-bold text-xs ${u.status === 'active' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
-                              {u.status}
+                          <td className="p-3.5 uppercase font-bold text-xs">
+                            <span className={`px-2.5 py-1 rounded-lg ${
+                              u.role === 'admin' ? 'bg-purple-100 text-purple-800 font-black' :
+                              u.role === 'tutor' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-800'
+                            }`}>
+                              {u.role === 'admin' ? 'Super Admin' : u.role}
                             </span>
                           </td>
+
+                          <td className="p-3.5">
+                            <span className={`px-2.5 py-1 rounded-lg font-bold text-xs ${u.status === 'active' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
+                              {u.status === 'active' ? 'Activo' : 'Suspendido'}
+                            </span>
+                          </td>
+
                           <td className="p-3.5 text-right">
-                            {u.role !== 'admin' ? (
-                              <button onClick={async () => {
-                                const newStatus = u.status === 'active' ? 'inactive' : 'active';
-                                setUsers(prev => prev.map(x => x.id === u.id ? { ...x, status: newStatus } : x));
-                                try {
-                                  const { error } = await supabase.from('users').update({ status: newStatus }).eq('id', u.id);
-                                  if (error) {
-                                    showToast('Error al actualizar estado en BD: ' + error.message, 'danger');
-                                    return;
-                                  }
-                                  await logAudit(currentUser.name, 'CAMBIO DE ESTADO', `Se cambió estado de ${u.name} a ${newStatus}`);
-                                  showToast(`Usuario ${newStatus === 'active' ? 'activado' : 'suspendido'} con éxito`);
-                                } catch (e) {
-                                  console.error(e);
-                                }
-                              }} className="font-bold px-3.5 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl">Modificar Estado</button>
-                            ) : (
-                              <span className="text-sm text-slate-400 italic">Protegido</span>
-                            )}
+                            <div className="flex items-center justify-end space-x-1.5">
+                              {/* Botón Modificar Estado */}
+                              {u.email !== 'admin@gmail.com' ? (
+                                <button
+                                  onClick={() => handleToggleUserStatus(u)}
+                                  title={u.status === 'active' ? 'Suspender / Desactivar cuenta' : 'Activar cuenta de usuario'}
+                                  className={`p-2 rounded-xl transition shadow-xs border ${
+                                    u.status === 'active'
+                                      ? 'bg-amber-50 text-amber-700 hover:bg-amber-100 border-amber-200'
+                                      : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200'
+                                  }`}
+                                >
+                                  {u.status === 'active' ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
+                                </button>
+                              ) : (
+                                <span title="Estado de Super Admin protegido" className="p-2 rounded-xl bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed">
+                                  <ShieldCheck className="w-4 h-4" />
+                                </span>
+                              )}
+
+                              {/* Botón Editar Usuario */}
+                              <button
+                                onClick={() => setEditingUserByAdmin({ ...u })}
+                                title="Editar información del usuario"
+                                className="p-2 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition shadow-xs"
+                              >
+                                <Edit3 className="w-4 h-4" />
+                              </button>
+
+                              {/* Botón Eliminar Usuario */}
+                              {u.email !== 'admin@gmail.com' && u.id !== currentUser?.id ? (
+                                <button
+                                  onClick={() => setUserToDeleteByAdmin(u)}
+                                  title="Eliminar usuario permanentemente"
+                                  className="p-2 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 transition shadow-xs"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              ) : (
+                                <span title="Cuenta de administrador protegida" className="p-2 rounded-xl bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed">
+                                  <Lock className="w-4 h-4" />
+                                </span>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -2600,6 +3012,369 @@ export default function App() {
               </div>
               <button type="submit" className="w-full text-white font-bold py-3.5 rounded-xl text-sm transition hover:opacity-90" style={{ backgroundColor: primaryColor }}>Confirmar Solicitud</button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CREAR USUARIO POR ADMINISTRADOR */}
+      {showCreateUserModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-xl rounded-3xl p-6 sm:p-8 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b pb-3">
+              <div>
+                <h3 className="font-black text-xl text-slate-900">Registrar Nuevo Usuario</h3>
+                <p className="text-xs text-slate-500 font-medium">Creación directa en base de datos con asignación de rol.</p>
+              </div>
+              <button onClick={() => setShowCreateUserModal(false)} className="p-1 hover:bg-slate-100 rounded-full">
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
+
+            {adminCreateError && (
+              <div className="bg-red-50 text-red-700 text-xs font-bold p-3.5 rounded-xl border border-red-200 flex items-center space-x-2">
+                <AlertCircle className="w-4.5 h-4.5 shrink-0" />
+                <span>{adminCreateError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleAdminCreateUser} className="space-y-4 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-xs font-black uppercase text-slate-600 mb-1">Nombre</label>
+                  <input
+                    type="text"
+                    maxLength={20}
+                    required
+                    placeholder="Nombre"
+                    value={adminCreateForm.name}
+                    onChange={e => setAdminCreateForm({ ...adminCreateForm, name: e.target.value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]/g, '') })}
+                    className="w-full p-3 border-2 rounded-xl text-sm font-medium outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-black uppercase text-slate-600 mb-1">Apellido</label>
+                  <input
+                    type="text"
+                    maxLength={20}
+                    required
+                    placeholder="Apellido"
+                    value={adminCreateForm.lastName}
+                    onChange={e => setAdminCreateForm({ ...adminCreateForm, lastName: e.target.value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]/g, '') })}
+                    className="w-full p-3 border-2 rounded-xl text-sm font-medium outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-xs font-black uppercase text-slate-600 mb-1">Cédula</label>
+                  <input
+                    type="text"
+                    maxLength={8}
+                    required
+                    placeholder="26123456"
+                    value={adminCreateForm.cedula}
+                    onChange={e => setAdminCreateForm({ ...adminCreateForm, cedula: e.target.value.replace(/\D/g, '') })}
+                    className="w-full p-3 border-2 rounded-xl text-sm font-medium outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-black uppercase text-slate-600 mb-1">Rol en el Sistema</label>
+                  <select
+                    value={adminCreateForm.role}
+                    onChange={e => setAdminCreateForm({ ...adminCreateForm, role: e.target.value })}
+                    className="w-full p-3 border-2 rounded-xl text-sm font-bold bg-white outline-none"
+                  >
+                    <option value="student">Estudiante</option>
+                    <option value="tutor">Tutor Docente</option>
+                    <option value="admin">Super Administrador (Admin Global)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-black uppercase text-slate-600 mb-1">Correo Electrónico</label>
+                <input
+                  type="email"
+                  maxLength={50}
+                  required
+                  placeholder="usuario@gmail.com"
+                  value={adminCreateForm.email}
+                  onChange={e => setAdminCreateForm({ ...adminCreateForm, email: e.target.value })}
+                  className="w-full p-3 border-2 rounded-xl text-sm font-medium outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div className="relative">
+                  <label className="block text-xs font-black uppercase text-slate-600 mb-1">Contraseña</label>
+                  <input
+                    type={adminCreateShowPass ? 'text' : 'password'}
+                    required
+                    placeholder="••••••••"
+                    value={adminCreateForm.password}
+                    onChange={e => setAdminCreateForm({ ...adminCreateForm, password: e.target.value })}
+                    className="w-full p-3 pr-10 border-2 rounded-xl text-sm font-medium outline-none"
+                  />
+                  <button type="button" onClick={() => setAdminCreateShowPass(!adminCreateShowPass)} className="absolute right-3 top-8 text-slate-400">
+                    {adminCreateShowPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <div className="relative">
+                  <label className="block text-xs font-black uppercase text-slate-600 mb-1">Confirmar Contraseña</label>
+                  <input
+                    type={adminCreateShowConfirmPass ? 'text' : 'password'}
+                    required
+                    placeholder="••••••••"
+                    value={adminCreateForm.confirmPassword}
+                    onChange={e => setAdminCreateForm({ ...adminCreateForm, confirmPassword: e.target.value })}
+                    className="w-full p-3 pr-10 border-2 rounded-xl text-sm font-medium outline-none"
+                  />
+                  <button type="button" onClick={() => setAdminCreateShowConfirmPass(!adminCreateShowConfirmPass)} className="absolute right-3 top-8 text-slate-400">
+                    {adminCreateShowConfirmPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-black uppercase text-slate-600 mb-1">Teléfono</label>
+                <div className="flex gap-2">
+                  <select
+                    value={adminCreateForm.prefix}
+                    onChange={e => setAdminCreateForm({ ...adminCreateForm, prefix: e.target.value })}
+                    className="p-3 border-2 rounded-xl text-sm bg-white font-bold outline-none"
+                  >
+                    <option value="0412">0412</option>
+                    <option value="0414">0414</option>
+                    <option value="0416">0416</option>
+                    <option value="0424">0424</option>
+                    <option value="0426">0426</option>
+                    <option value="0422">0422</option>
+                  </select>
+                  <input
+                    type="text"
+                    maxLength={7}
+                    required
+                    placeholder="1234567"
+                    value={adminCreateForm.phoneNum}
+                    onChange={e => setAdminCreateForm({ ...adminCreateForm, phoneNum: e.target.value.replace(/\D/g, '') })}
+                    className="w-full p-3 border-2 rounded-xl text-sm font-medium outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-xs font-black uppercase text-slate-600 mb-1">Carrera</label>
+                  <select
+                    value={adminCreateForm.career}
+                    onChange={e => setAdminCreateForm({ ...adminCreateForm, career: e.target.value })}
+                    className="w-full p-3 border-2 rounded-xl text-sm font-bold bg-white outline-none"
+                  >
+                    {careers.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-black uppercase text-slate-600 mb-1">Dirección</label>
+                  <input
+                    type="text"
+                    maxLength={100}
+                    required
+                    placeholder="Sede / Domicilio"
+                    value={adminCreateForm.address}
+                    onChange={e => setAdminCreateForm({ ...adminCreateForm, address: e.target.value })}
+                    className="w-full p-3 border-2 rounded-xl text-sm font-medium outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateUserModal(false)}
+                  className="w-1/2 p-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-sm transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={adminCreateSubmitting}
+                  className="w-1/2 p-3 text-white font-bold rounded-xl text-sm shadow-md transition hover:opacity-90 disabled:opacity-50"
+                  style={{ backgroundColor: primaryColor }}
+                >
+                  {adminCreateSubmitting ? 'Guardando en la nube...' : 'Crear Usuario'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL EDITAR USUARIO POR ADMINISTRADOR */}
+      {editingUserByAdmin && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-3xl p-6 sm:p-8 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b pb-3">
+              <div>
+                <h3 className="font-black text-xl text-slate-900">Editar Información de Usuario</h3>
+                <p className="text-xs text-slate-500 font-medium">Modifica los datos personales y privilegios en el sistema.</p>
+              </div>
+              <button onClick={() => setEditingUserByAdmin(null)} className="p-1 hover:bg-slate-100 rounded-full">
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAdminSaveUser} className="space-y-4 text-sm">
+              <div>
+                <label className="block text-xs font-black uppercase text-slate-600 mb-1">Nombre Completo</label>
+                <input
+                  type="text"
+                  required
+                  value={editingUserByAdmin.name}
+                  onChange={e => setEditingUserByAdmin({ ...editingUserByAdmin, name: e.target.value })}
+                  className="w-full p-3 border-2 rounded-xl text-sm font-medium outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-xs font-black uppercase text-slate-600 mb-1">Correo Electrónico</label>
+                  <input
+                    type="email"
+                    required
+                    value={editingUserByAdmin.email}
+                    onChange={e => setEditingUserByAdmin({ ...editingUserByAdmin, email: e.target.value })}
+                    className="w-full p-3 border-2 rounded-xl text-sm font-medium outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-black uppercase text-slate-600 mb-1">Cédula</label>
+                  <input
+                    type="text"
+                    value={editingUserByAdmin.cedula || ''}
+                    onChange={e => setEditingUserByAdmin({ ...editingUserByAdmin, cedula: e.target.value })}
+                    className="w-full p-3 border-2 rounded-xl text-sm font-medium outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-xs font-black uppercase text-slate-600 mb-1">Teléfono</label>
+                  <input
+                    type="text"
+                    value={editingUserByAdmin.phone || ''}
+                    onChange={e => setEditingUserByAdmin({ ...editingUserByAdmin, phone: e.target.value })}
+                    className="w-full p-3 border-2 rounded-xl text-sm font-medium outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-black uppercase text-slate-600 mb-1">Carrera</label>
+                  <select
+                    value={editingUserByAdmin.career || 'Informática'}
+                    onChange={e => setEditingUserByAdmin({ ...editingUserByAdmin, career: e.target.value })}
+                    className="w-full p-3 border-2 rounded-xl text-sm font-bold bg-white outline-none"
+                  >
+                    {careers.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-black uppercase text-slate-600 mb-1">Dirección</label>
+                <input
+                  type="text"
+                  value={editingUserByAdmin.address || ''}
+                  onChange={e => setEditingUserByAdmin({ ...editingUserByAdmin, address: e.target.value })}
+                  className="w-full p-3 border-2 rounded-xl text-sm font-medium outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-xs font-black uppercase text-slate-600 mb-1">Rol</label>
+                  <select
+                    value={editingUserByAdmin.role}
+                    onChange={e => setEditingUserByAdmin({ ...editingUserByAdmin, role: e.target.value })}
+                    className="w-full p-3 border-2 rounded-xl text-sm font-bold bg-white outline-none"
+                  >
+                    <option value="student">Estudiante</option>
+                    <option value="tutor">Tutor Docente</option>
+                    <option value="admin">Super Administrador</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-black uppercase text-slate-600 mb-1">Estado</label>
+                  <select
+                    value={editingUserByAdmin.status}
+                    onChange={e => setEditingUserByAdmin({ ...editingUserByAdmin, status: e.target.value })}
+                    className="w-full p-3 border-2 rounded-xl text-sm font-bold bg-white outline-none"
+                  >
+                    <option value="active">Activo</option>
+                    <option value="inactive">Suspendido</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingUserByAdmin(null)}
+                  className="w-1/2 p-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-sm transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="w-1/2 p-3 text-white font-bold rounded-xl text-sm shadow-md transition hover:opacity-90"
+                  style={{ backgroundColor: primaryColor }}
+                >
+                  Guardar Cambios
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ELIMINAR USUARIO POR ADMINISTRADOR */}
+      {userToDeleteByAdmin && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl space-y-4.5">
+            <div className="flex items-center space-x-3 text-red-600 border-b pb-3">
+              <div className="p-2 rounded-xl bg-red-50">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-black text-lg text-slate-900">¿Eliminar Usuario?</h3>
+                <p className="text-xs text-slate-500">Esta acción es irreversible en la base de datos.</p>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-1.5 text-xs text-slate-700">
+              <p><strong className="text-slate-900">Usuario:</strong> {userToDeleteByAdmin.name}</p>
+              <p><strong className="text-slate-900">Correo:</strong> {userToDeleteByAdmin.email}</p>
+              <p><strong className="text-slate-900">Rol:</strong> <span className="uppercase font-bold">{userToDeleteByAdmin.role}</span></p>
+              {userToDeleteByAdmin.cedula && <p><strong className="text-slate-900">Cédula:</strong> {userToDeleteByAdmin.cedula}</p>}
+            </div>
+
+            <div className="flex gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => setUserToDeleteByAdmin(null)}
+                className="w-1/2 bg-slate-100 hover:bg-slate-200 font-bold py-3 rounded-xl text-sm text-slate-800 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleAdminDeleteUser}
+                className="w-1/2 bg-red-600 hover:bg-red-700 font-bold py-3 rounded-xl text-sm text-white shadow-md transition flex items-center justify-center space-x-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Eliminar</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
