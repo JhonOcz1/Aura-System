@@ -5081,46 +5081,106 @@ export default function App() {
               </div>
             )}
 
-            {activeTab === 'find_tutors' && currentUser.role === 'student' && (
-              <div className="space-y-6">
-                <h2 className="text-xl font-black text-slate-800">Buscar Tutores Disponibles</h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {users.filter(u => u.role === 'tutor').map(tutor => {
-                    const tutorReviews = reviews.filter(r => r.target === tutor.name && r.status === 'approved');
-                    const sumRatings = tutorReviews.reduce((sum, r) => sum + (Number(r.rating) || 0), 0);
-                    const avgRating = tutorReviews.length > 0 ? (sumRatings / tutorReviews.length).toFixed(1) : null;
-                    const tutorSubjectsList = tutor.subjectsDetailed || (tutor.subjects || []).map(s => ({ name: s, day: 'Por definir', time: '' }));
+            {activeTab === 'find_tutors' && currentUser.role === 'student' && (() => {
+              const studentCareerClean = (currentUser.career || '').trim().toLowerCase();
+              const tutorsForCareer = users.filter(u => 
+                u.role === 'tutor' && 
+                (!studentCareerClean || (u.career || '').trim().toLowerCase() === studentCareerClean)
+              );
 
-                    return (
-                      <div key={tutor.id} onClick={() => setViewingTutorProfile(tutor)} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between cursor-pointer transition hover:shadow-md group">
-                        <div className="space-y-3">
-                          <div className="flex items-center space-x-3">
-                            <div className="w-12 h-12 rounded-full overflow-hidden bg-slate-200 border-2 border-slate-300 flex items-center justify-center shrink-0 shadow-sm">
-                              {tutor.avatar ? (
-                                <img src={tutor.avatar} alt={tutor.name} className="w-full h-full object-cover" />
-                              ) : (
-                                <span className="text-base font-black text-slate-600">{tutor.name?.charAt(0) || 'T'}</span>
-                              )}
+              return (
+                <div className="space-y-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-3">
+                    <div>
+                      <h2 className="text-xl font-black text-slate-800">Tutores Disponibles para tu Carrera ({currentUser.career})</h2>
+                      <p className="text-xs text-slate-500 font-medium">Docentes tutores activos de tu carrera con historial de tutorías impartidas</p>
+                    </div>
+                    <span className="self-start sm:self-auto px-3.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
+                      {tutorsForCareer.length} Tutor(es) disponible(s)
+                    </span>
+                  </div>
+
+                  {tutorsForCareer.length === 0 ? (
+                    <div className="p-10 text-center bg-white border border-dashed rounded-3xl space-y-2.5">
+                      <Users className="w-10 h-10 text-slate-300 mx-auto" />
+                      <p className="text-base font-bold text-slate-700">No hay tutores registrados para la carrera {currentUser.career} aún.</p>
+                      <p className="text-xs text-slate-400 max-w-sm mx-auto">Pronto se incorporarán docentes tutores para impartir clases en esta área.</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {tutorsForCareer.map(tutor => {
+                        const tutorReviews = reviews.filter(r => r.target === tutor.name && r.status === 'approved');
+                        const sumRatings = tutorReviews.reduce((sum, r) => sum + (Number(r.rating) || 0), 0);
+                        const avgRating = tutorReviews.length > 0 ? (sumRatings / tutorReviews.length).toFixed(1) : null;
+
+                        // Materias que ha impartido con anterioridad (tutorías completadas con éxito)
+                        const completedTutSessions = (sessions || []).filter(
+                          s => s.tutorId === tutor.id && s.status === 'completed'
+                        );
+                        const successfulSubjects = Array.from(new Set(completedTutSessions.map(s => s.subject).filter(Boolean)));
+
+                        return (
+                          <div key={tutor.id} onClick={() => setViewingTutorProfile(tutor)} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between cursor-pointer transition hover:shadow-md group space-y-4">
+                            <div className="space-y-3.5">
+                              <div className="flex items-center space-x-3">
+                                <div className="w-12 h-12 rounded-full overflow-hidden bg-slate-200 border-2 border-slate-300 flex items-center justify-center shrink-0 shadow-sm">
+                                  {tutor.avatar ? (
+                                    <img src={tutor.avatar} alt={tutor.name} className="w-full h-full object-cover" />
+                                  ) : (
+                                    <span className="text-base font-black text-slate-600">{tutor.name?.charAt(0) || 'T'}</span>
+                                  )}
+                                </div>
+                                <div className="min-w-0">
+                                  <h3 className="font-extrabold text-slate-900 text-base group-hover:opacity-80 transition truncate">{tutor.name}</h3>
+                                  <p className="text-xs font-bold" style={{ color: primaryColor }}>{tutor.career}</p>
+                                </div>
+                              </div>
+
+                              <p className="text-xs text-slate-600 line-clamp-2">{tutor.bio || 'Docente tutor activo en el sistema institucional.'}</p>
+
+                              {/* Materias impartidas con anterioridad con éxito */}
+                              <div className="pt-2.5 border-t border-slate-100 space-y-1.5">
+                                <span className="text-[10px] font-black uppercase text-slate-400 block tracking-wide">
+                                  Tutorías realizadas con éxito:
+                                </span>
+                                {successfulSubjects.length > 0 ? (
+                                  <div className="flex flex-wrap gap-1">
+                                    {successfulSubjects.map((subName, idx) => (
+                                      <span key={idx} className="px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-bold">
+                                        ✓ {subName}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <span className="text-[11px] text-slate-400 italic block">
+                                    Aún no registra tutorías finalizadas
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                            <div className="min-w-0">
-                              <h3 className="font-extrabold text-slate-900 text-base group-hover:opacity-80 transition truncate">{tutor.name}</h3>
-                              <p className="text-xs font-bold" style={{ color: primaryColor }}>{tutor.career}</p>
+
+                            <div className="border-t pt-3.5 flex items-center justify-between">
+                              <span className="text-xs font-bold text-slate-500">Opiniones ({tutorReviews.length})</span>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedTutorForBooking(tutor);
+                                }}
+                                className="text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-sm transition hover:opacity-90 flex items-center space-x-1.5"
+                                style={{ backgroundColor: primaryColor }}
+                              >
+                                <Calendar className="w-3.5 h-3.5" />
+                                <span>Reservar Cita</span>
+                              </button>
                             </div>
                           </div>
-                          <p className="text-xs text-slate-600 line-clamp-2">{tutor.bio || 'Docente tutor activo en el sistema institucional.'}</p>
-                        </div>
-                        <div className="border-t pt-4 mt-4 flex items-center justify-between">
-                          <span className="text-sm font-bold text-slate-500 underline">Opiniones ({tutorReviews.length})</span>
-                          <button onClick={(e) => { e.stopPropagation(); setSelectedTutorForBooking(tutor); }} className="text-white text-sm font-bold px-4 py-2.5 rounded-xl shadow-sm transition hover:opacity-90" style={{ backgroundColor: primaryColor }}>
-                            Reservar Cita
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {activeTab === 'sessions' && currentUser.role !== 'admin' && (() => {
               const userSessions = sessions.filter(s => 
@@ -5293,6 +5353,18 @@ export default function App() {
                                   </>
                                 )}
 
+                                {/* Cancelar tutoría pendiente por parte del estudiante (solo si el tutor NO la ha aceptado aún) */}
+                                {isPending && currentUser.role === 'student' && (
+                                  <button
+                                    onClick={() => handleStudentCancelPendingSession(session)}
+                                    className="px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-700 font-bold rounded-xl transition text-xs border border-red-200 flex items-center space-x-1.5 shadow-xs"
+                                    title="Cancelar solicitud antes de que sea aceptada por el tutor"
+                                  >
+                                    <XCircle className="w-4 h-4 text-red-600" />
+                                    <span>Cancelar Solicitud</span>
+                                  </button>
+                                )}
+
                                 {(isConfirmed || isCompleted) && (
                                   <button
                                     onClick={() => {
@@ -5433,6 +5505,33 @@ export default function App() {
                     ))}
                   </div>
                 </div>
+
+                {/* Historial de tutorías completadas con éxito */}
+                {(() => {
+                  const completedForThisTutor = (sessions || []).filter(
+                    s => s.tutorId === viewingTutorProfile.id && s.status === 'completed'
+                  );
+                  const successfulSubjectsModal = Array.from(new Set(completedForThisTutor.map(s => s.subject).filter(Boolean)));
+                  
+                  return (
+                    <div className="pt-2 border-t border-slate-100">
+                      <strong className="block mb-2 uppercase font-extrabold text-xs tracking-wider text-slate-500">
+                        Tutorías realizadas con éxito con anterioridad:
+                      </strong>
+                      {successfulSubjectsModal.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {successfulSubjectsModal.map((sub, i) => (
+                            <span key={i} className="px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold">
+                              ✓ {sub}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-400 italic">Este docente aún no tiene tutorías marcadas como finalizadas en el sistema.</p>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="pt-2">
@@ -5570,18 +5669,66 @@ export default function App() {
               <h3 className="font-bold text-lg text-slate-900">Reservar Tutoría</h3>
               <button onClick={() => setSelectedTutorForBooking(null)}><X className="w-5 h-5 text-slate-500" /></button>
             </div>
-            <form onSubmit={handleBookSession} className="space-y-4.5 text-sm">
-              <input type="text" disabled value={selectedTutorForBooking.name} className="w-full p-3.5 bg-slate-100 border rounded-xl font-bold text-slate-800" />
-              <select value={bookingSubject} onChange={e => setBookingSubject(e.target.value)} required className="w-full p-3.5 border rounded-xl bg-white text-sm font-medium">
-                <option value="">-- Selecciona una materia --</option>
-                {(selectedTutorForBooking.subjects?.length ? selectedTutorForBooking.subjects : Array.from(new Set((selectedTutorForBooking.subjectsDetailed || []).map(s => s.name)))).map((sub, i) => <option key={i} value={sub}>{sub}</option>)}
-              </select>
-              <div className="grid grid-cols-2 gap-3.5">
-                <input type="date" min={todayDateFormatted} value={bookingDate} onChange={e => setBookingDate(e.target.value)} required className="w-full p-3.5 border rounded-xl text-sm" />
-                <input type="time" value={bookingTime} onChange={e => setBookingTime(e.target.value)} required className="w-full p-3.5 border rounded-xl text-sm" />
-              </div>
-              <button type="submit" className="w-full text-white font-bold py-3.5 rounded-xl text-sm transition hover:opacity-90" style={{ backgroundColor: primaryColor }}>Confirmar Solicitud</button>
-            </form>
+            {(() => {
+              const tutorCareerClean = (selectedTutorForBooking.career || '').trim().toLowerCase();
+              const subjectsFromCatalog = catalogSubjects
+                .filter(s => (s.career || '').trim().toLowerCase() === tutorCareerClean)
+                .map(s => s.name);
+              
+              const allAvailableSubjects = Array.from(new Set([
+                ...(selectedTutorForBooking.subjects || []),
+                ...((selectedTutorForBooking.subjectsDetailed || []).map(s => s.name)),
+                ...subjectsFromCatalog
+              ])).filter(Boolean);
+
+              return (
+                <form onSubmit={handleBookSession} className="space-y-4 text-sm">
+                  <div>
+                    <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Docente Tutor</label>
+                    <input type="text" disabled value={selectedTutorForBooking.name + ' (' + (selectedTutorForBooking.career || 'IUJO') + ')'} className="w-full p-3 bg-slate-100 border rounded-xl font-bold text-slate-800 text-xs" />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Materia a Solicitar</label>
+                    <select value={bookingSubject} onChange={e => setBookingSubject(e.target.value)} required className="w-full p-3 border rounded-xl bg-white text-xs font-bold text-slate-800">
+                      <option value="">-- Selecciona una materia --</option>
+                      {allAvailableSubjects.map((sub, i) => <option key={i} value={sub}>{sub}</option>)}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Fecha</label>
+                      <input type="date" min={todayDateFormatted} value={bookingDate} onChange={e => setBookingDate(e.target.value)} required className="w-full p-3 border rounded-xl text-xs" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Hora</label>
+                      <input type="time" value={bookingTime} onChange={e => setBookingTime(e.target.value)} required className="w-full p-3 border rounded-xl text-xs" />
+                    </div>
+                  </div>
+
+                  {/* Campo de mensaje para el tutor */}
+                  <div>
+                    <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Mensaje o Temas que necesitas tratar</label>
+                    <textarea
+                      rows={3}
+                      placeholder="Escribe aquí los temas específicos, dudas o requerimientos que necesitas revisar en la tutoría..."
+                      value={bookingMessage}
+                      onChange={e => setBookingMessage(e.target.value)}
+                      className="w-full p-3 border rounded-xl text-xs font-medium resize-none"
+                    ></textarea>
+                  </div>
+
+                  <p className="text-[11px] text-slate-500 bg-amber-50 p-2.5 rounded-xl border border-amber-200">
+                    ℹ️ Esta solicitud se enviará como notificación al docente tutor. El tutor podrá aceptar o rechazar la tutoría. Una vez aceptada, se abrirá el chat interactivo.
+                  </p>
+
+                  <button type="submit" className="w-full text-white font-bold py-3.5 rounded-xl text-sm transition hover:opacity-90 shadow-md" style={{ backgroundColor: primaryColor }}>
+                    Enviar Solicitud al Tutor
+                  </button>
+                </form>
+              );
+            })()}
           </div>
         </div>
       )}
