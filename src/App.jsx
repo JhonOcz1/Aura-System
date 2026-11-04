@@ -163,6 +163,17 @@ const getVenezuelaDateString = (date = new Date()) => {
   return formatter.format(date);
 };
 
+const getVenezuelaTimeString = (date = new Date()) => {
+  const d = new Date(date);
+  const formatter = new Intl.DateTimeFormat('es-VE', {
+    timeZone: 'America/Caracas',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  });
+  return formatter.format(d);
+};
+
 const formatAuditTimestamp = (ts) => {
   if (!ts) return '';
   if (/^\d{2}\/\d{2}\/\d{4}/.test(ts)) return ts;
@@ -1264,18 +1275,73 @@ export default function App() {
   };
 
   const handleAvatarUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+
+    // Si es SVG, se procesa como texto / data URL directamente
+    if (file.type === 'image/svg+xml' || file.name.toLowerCase().endsWith('.svg')) {
       const reader = new FileReader();
-      reader.onloadend = async () => {
-        const updated = { ...currentUser, avatar: reader.result };
-        const ok = await updateUserInDB(updated, 'Foto de perfil actualizada con éxito');
+      reader.onload = async (event) => {
+        const result = event.target.result;
+        const updated = { ...currentUser, avatar: result };
+        const ok = await updateUserInDB(updated, 'Foto de perfil SVG actualizada con éxito');
         if (ok) {
-          await logAudit(currentUser.name, 'ACTUALIZACIÓN DE FOTO', 'Se cargó una nueva imagen de perfil');
+          await logAudit(currentUser.name, 'ACTUALIZACIÓN DE FOTO', 'Se cargó un nuevo avatar SVG');
         }
       };
       reader.readAsDataURL(file);
+      return;
     }
+
+    // Para cualquier otro formato de imagen (PNG, JPG, JPEG, WEBP, GIF, BMP, ICO, HEIC, AVIF, etc.):
+    // Redimensionamos proporcionalmente a un máximo de 400x400 px y comprimimos a JPEG optimizado (0.88)
+    // Esto garantiza que fotos de cámaras o teléfonos (10MB+) pesen ~30KB-50KB y nunca superen límites en Supabase
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const rawDataUrl = event.target.result;
+      const img = new Image();
+      img.onload = async () => {
+        try {
+          const canvas = document.createElement('canvas');
+          const MAX_DIM = 400;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_DIM) {
+              height = Math.round((height * MAX_DIM) / width);
+              width = MAX_DIM;
+            }
+          } else {
+            if (height > MAX_DIM) {
+              width = Math.round((width * MAX_DIM) / height);
+              height = MAX_DIM;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          const optimizedDataUrl = canvas.toDataURL('image/jpeg', 0.88);
+          const updated = { ...currentUser, avatar: optimizedDataUrl };
+          const ok = await updateUserInDB(updated, 'Foto de perfil actualizada con éxito');
+          if (ok) {
+            await logAudit(currentUser.name, 'ACTUALIZACIÓN DE FOTO', 'Se cargó una nueva imagen de perfil optimizada');
+          }
+        } catch (err) {
+          const updated = { ...currentUser, avatar: rawDataUrl };
+          await updateUserInDB(updated, 'Foto de perfil actualizada con éxito');
+        }
+      };
+      img.onerror = async () => {
+        const updated = { ...currentUser, avatar: rawDataUrl };
+        await updateUserInDB(updated, 'Foto de perfil cargada');
+      };
+      img.src = rawDataUrl;
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleBookSession = async (e) => {
@@ -1385,20 +1451,19 @@ export default function App() {
   const handleTutorCreateSession = async (e) => {
     e.preventDefault();
     if (!tutorNewTutSubject) {
-      showToast('Por favor selecciona una materia de tu carrera asignada', 'danger');
-      return;
-    }
-    if (!tutorNewTutDate || !tutorNewTutTime) {
-      showToast('Ingresa la fecha y hora de la tutoría', 'danger');
+      showToast('Por favor selecciona una materia para la tutoría', 'danger');
       return;
     }
 
+    const finalDate = tutorNewTutDate || getVenezuelaDateString();
+    const finalTime = tutorNewTutTime || '10:00';
     const safeLocation = (tutorNewTutLocation || '').trim() || (tutorNewTutModality === 'Virtual / Online' ? 'Google Meet / Enlace en Chat' : 'Sede Central IUJO');
     const safeDesc = (tutorNewTutDescription || '').trim() || 'Tutoría programada por el tutor académico.';
     const newId = `ses_${Date.now()}`;
 
     const metaObj = {
       __meta: true,
+      career: currentUser.career || '',
       modality: tutorNewTutModality || 'Presencial',
       location: safeLocation,
       description: safeDesc
@@ -1408,7 +1473,7 @@ export default function App() {
       id: `msg_sys_${Date.now()}`,
       sender: 'Sistema',
       senderRole: 'system',
-      text: `Tutoría creada por el docente ${currentUser.name}. Modalidad: ${tutorNewTutModality || 'Presencial'} (${safeLocation}).`,
+      text: `Oferta de tutoría creada por el docente ${currentUser.name}. Modalidad: ${tutorNewTutModality || 'Presencial'} (${safeLocation}).`,
       time: getVenezuelaTimeString()
     };
 
@@ -1418,9 +1483,10 @@ export default function App() {
       studentName: 'Cupo Disponible (Abierta)',
       tutorId: currentUser.id,
       tutorName: currentUser.name,
+      career: currentUser.career || '',
       subject: tutorNewTutSubject,
-      date: tutorNewTutDate,
-      time: tutorNewTutTime,
+      date: finalDate,
+      time: finalTime,
       modality: tutorNewTutModality || 'Presencial',
       location: safeLocation,
       description: safeDesc,
@@ -1429,7 +1495,6 @@ export default function App() {
     };
 
     try {
-      // 1. Intento de inserción con columnas extendidas (si ya ejecutó el SQL)
       let payload = {
         id: newId,
         student_id: '',
@@ -1437,8 +1502,8 @@ export default function App() {
         tutor_id: currentUser.id,
         tutor_name: currentUser.name,
         subject: tutorNewTutSubject,
-        date: tutorNewTutDate,
-        time: tutorNewTutTime,
+        date: finalDate,
+        time: finalTime,
         status: 'confirmed',
         modality: tutorNewTutModality || 'Presencial',
         location: safeLocation,
@@ -1448,7 +1513,6 @@ export default function App() {
 
       let { error } = await supabase.from('sessions').insert([payload]);
 
-      // 2. Si falla porque no existen aún las columnas modality/location en Supabase, reintentar sin ellas
       if (error && error.message && (error.message.includes('column') || error.message.includes('modality') || error.message.includes('location'))) {
         delete payload.modality;
         delete payload.location;
@@ -1458,11 +1522,10 @@ export default function App() {
       }
 
       if (error) {
-        showToast('Error al registrar la tutoría en la base de datos: ' + error.message, 'danger');
+        showToast('Error al publicar la oferta en la base de datos: ' + error.message, 'danger');
         return;
       }
 
-      // También registrar en tabla messages si existe
       try {
         await supabase.from('messages').insert([{
           id: sysMsg.id,
@@ -1478,15 +1541,103 @@ export default function App() {
       setSessions(prev => [newSession, ...prev]);
       await logAudit(
         currentUser.name,
-        'TUTORÍA CREADA',
-        `Tutoría de ${tutorNewTutSubject} creada para el ${tutorNewTutDate} a las ${tutorNewTutTime} (${tutorNewTutModality || 'Presencial'})`
+        'OFERTA DE TUTORÍA PUBLICADA',
+        `Oferta de ${tutorNewTutSubject} (${currentUser.career}) para el ${finalDate} a las ${finalTime} (${tutorNewTutModality || 'Presencial'})`
       );
-      showToast(`¡Tutoría de "${tutorNewTutSubject}" creada exitosamente!`);
+      showToast(`¡Oferta de "${tutorNewTutSubject}" publicada exitosamente para los estudiantes!`);
       setTutorNewTutDescription('');
       setTutorNewTutLocation('');
+      setTutorNewTutDate('');
+      setTutorNewTutTime('');
     } catch (err) {
       console.error(err);
       showToast('Error de conexión al guardar la tutoría: ' + err.message, 'danger');
+    }
+  };
+
+  // Función para que un estudiante se inscriba en una oferta abierta de tutoría de su carrera
+  const handleStudentEnrollSession = async (session) => {
+    try {
+      const enrollMsg = {
+        id: `msg_enr_${Date.now()}`,
+        sender: currentUser.name,
+        senderRole: 'student',
+        text: `¡Hola profesor ${session.tutorName}! Me he inscrito en esta oferta de tutoría de ${session.subject}. Quedo atento a las indicaciones.`,
+        time: getVenezuelaTimeString()
+      };
+
+      const metaObj = {
+        __meta: true,
+        career: session.career || currentUser.career || '',
+        modality: session.modality || 'Presencial',
+        location: session.location || 'Sede Central IUJO',
+        description: session.description || ''
+      };
+
+      const updatedChat = [...(session.chat || []), enrollMsg];
+
+      const { error } = await supabase
+        .from('sessions')
+        .update({
+          student_id: currentUser.id,
+          student_name: currentUser.name,
+          status: 'confirmed',
+          chat: [metaObj, ...updatedChat.filter(m => !m || !m.__meta)]
+        })
+        .eq('id', session.id);
+
+      if (error) {
+        showToast('Error al inscribirse en la tutoría: ' + error.message, 'danger');
+        return;
+      }
+
+      try {
+        await supabase.from('messages').insert([{
+          id: enrollMsg.id,
+          session_id: session.id,
+          sender_id: currentUser.id,
+          sender_name: currentUser.name,
+          sender_role: 'student',
+          text: enrollMsg.text,
+          created_at: new Date().toISOString()
+        }]);
+      } catch (eMsg) {}
+
+      try {
+        const notifId = `not_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+        await supabase.from('notifications').insert([{
+          id: notifId,
+          user_id: session.tutorId,
+          title: '¡Estudiante Inscrito!',
+          text: `${currentUser.name} se ha inscrito en tu oferta de tutoría de ${session.subject}. Revisa el chat para coordinar detalles.`,
+          session_id: session.id,
+          type: 'booking_request',
+          time: 'Justo ahora',
+          read: false
+        }]);
+      } catch (eNotif) {}
+
+      const updatedSession = {
+        ...session,
+        studentId: currentUser.id,
+        studentName: currentUser.name,
+        status: 'confirmed',
+        chat: updatedChat
+      };
+
+      setSessions(prev => prev.map(s => s.id === session.id ? updatedSession : s));
+      await logAudit(
+        currentUser.name,
+        'INSCRIPCIÓN EN TUTORÍA',
+        `Inscripción exitosa en oferta de tutoría de ${session.subject} con el docente ${session.tutorName}`
+      );
+
+      showToast(`¡Te has inscrito exitosamente en la tutoría de "${session.subject}"!`);
+      setActiveChatSession(updatedSession);
+      setActiveTab('messages');
+    } catch (err) {
+      console.error(err);
+      showToast('Error al procesar la inscripción: ' + err.message, 'danger');
     }
   };
 
@@ -2534,7 +2685,7 @@ export default function App() {
                     <h1 className="text-2xl sm:text-4xl font-black">¡Hola, {currentUser.role === 'admin' ? 'Admin Global' : currentUser.name}!</h1>
                     <p className="text-white/80 text-sm mt-1">
                       {currentUser.role === 'admin' 
-                        ? 'Panel Central de Control: visualización de tutorías activas y asignación de tutores a materias de su pensum.'
+                        ? 'Panel Central de Control: visualización y monitoreo de tutorías activas en el sistema.'
                         : 'Bienvenido a tu plataforma académica AURA Estudiantil.'}
                     </p>
                   </div>
@@ -2546,290 +2697,103 @@ export default function App() {
                 {/* SI ES ADMINISTRADOR: VISTA DIVIDIDA (TUTORÍAS ACTIVAS A LA IZQUIERDA Y ASIGNACIÓN A LA DERECHA) */}
                 {currentUser.role === 'admin' && (() => {
                   const activeSessions = (sessions || []).filter(s => s.status === 'confirmed' || s.status === 'pending');
-                  const activeTutors = (users || []).filter(u => u.role === 'tutor');
-                  
-                  // Tutor seleccionado actualmente en el formulario de asignación
-                  const currentSelectedTutor = activeTutors.find(u => u.id === adminAssignTutorId) || activeTutors[0];
-                  const tutorCareer = currentSelectedTutor?.career || '';
-                  
-                  // Materias que pertenecen EXCLUSIVAMENTE a la carrera del tutor
-                  const subjectsForTutorCareer = catalogSubjects.filter(
-                    s => s.career?.toLowerCase() === tutorCareer.toLowerCase()
-                  ).sort((a, b) => (a.semester || 1) - (b.semester || 1) || a.name.localeCompare(b.name));
-
-                  const currentSelectedSubject = subjectsForTutorCareer.find(s => s.name === adminAssignSubjectName) || subjectsForTutorCareer[0];
 
                   return (
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                      {/* LADO IZQUIERDO (COL-SPAN-7): VISTA DE TUTORÍAS ACTIVAS */}
-                      <div className="lg:col-span-7 bg-white p-6 rounded-3xl border shadow-sm space-y-4">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b gap-2">
-                          <div className="flex items-center space-x-2.5">
-                            <div className="p-2 rounded-xl bg-blue-50 text-blue-600">
-                              <Activity className="w-5 h-5" />
-                            </div>
-                            <div>
-                              <h3 className="font-black text-lg text-slate-800">Tutorías Activas</h3>
-                              <p className="text-xs text-slate-500">Sesiones programadas y solicitudes en curso del sistema</p>
-                            </div>
+                    <div className="w-full bg-white p-6 sm:p-8 rounded-3xl border shadow-sm space-y-6">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b gap-3">
+                        <div className="flex items-center space-x-3">
+                          <div className="p-2.5 rounded-2xl bg-blue-50 text-blue-600">
+                            <Activity className="w-6 h-6" />
                           </div>
-                          <span className="self-start sm:self-auto px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
-                            {activeSessions.length} Activa(s)
-                          </span>
+                          <div>
+                            <h3 className="font-black text-xl text-slate-800">Tutorías Activas del Sistema</h3>
+                            <p className="text-xs text-slate-500">Monitoreo de todas las sesiones programadas y solicitudes en curso</p>
+                          </div>
                         </div>
+                        <span className="self-start sm:self-auto px-4 py-1.5 rounded-full text-xs font-black bg-blue-100 text-blue-800">
+                          {activeSessions.length} Activa(s)
+                        </span>
+                      </div>
 
-                        {activeSessions.length > 0 ? (
-                          <div className="space-y-3.5 max-h-[620px] overflow-y-auto pr-1">
-                            {activeSessions.map(session => {
-                              // Tutor académico asignado
-                              const tutorObj = users.find(u => u.id === session.tutorId);
-                              const tutorName = tutorObj?.name || session.tutorName || 'Tutor Académico';
-                              
-                              // Carrera: obtener del tutor o del catálogo
-                              const catalogMatch = catalogSubjects.find(cs => cs.name?.toLowerCase() === session.subject?.toLowerCase());
-                              const careerName = catalogMatch?.career || tutorObj?.career || 'General';
-                              
-                              // Semestre del pensum
-                              const semesterNum = catalogMatch?.semester || 
-                                tutorObj?.subjectsDetailed?.find(sd => sd.name?.toLowerCase() === session.subject?.toLowerCase())?.semester || 1;
+                      {activeSessions.length > 0 ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[700px] overflow-y-auto pr-1">
+                          {activeSessions.map(session => {
+                            const tutorObj = users.find(u => u.id === session.tutorId);
+                            const tutorName = tutorObj?.name || session.tutorName || 'Tutor Académico';
+                            const catalogMatch = catalogSubjects.find(cs => cs.name?.toLowerCase() === session.subject?.toLowerCase());
+                            const careerName = session.career || catalogMatch?.career || tutorObj?.career || 'General';
+                            const semesterNum = catalogMatch?.semester || 
+                              tutorObj?.subjectsDetailed?.find(sd => sd.name?.toLowerCase() === session.subject?.toLowerCase())?.semester || 1;
+                            const isConfirmed = session.status === 'confirmed';
 
-                              const isConfirmed = session.status === 'confirmed';
-
-                              return (
-                                <div
-                                  key={session.id}
-                                  className="p-4.5 rounded-2xl border border-slate-200 bg-slate-50/70 hover:bg-slate-50 transition space-y-3 shadow-xs"
-                                >
-                                  {/* Encabezado de la tutoría activa */}
+                            return (
+                              <div
+                                key={session.id}
+                                className="p-5 rounded-2xl border border-slate-200 bg-slate-50/70 hover:bg-slate-50 transition space-y-3.5 shadow-xs flex flex-col justify-between"
+                              >
+                                <div className="space-y-2">
                                   <div className="flex items-start justify-between gap-2">
-                                    <div>
-                                      <h4 className="font-black text-base text-slate-900 leading-snug">{session.subject}</h4>
-                                      <p className="text-xs text-slate-500 font-medium">Estudiante: <strong className="text-slate-700">{session.studentName}</strong></p>
-                                    </div>
+                                    <h4 className="font-black text-base text-slate-900 leading-snug">{session.subject}</h4>
                                     <span className={`px-2.5 py-1 rounded-xl text-[11px] font-black uppercase tracking-wider shrink-0 ${
                                       isConfirmed ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-amber-100 text-amber-800 border border-amber-200'
                                     }`}>
                                       {isConfirmed ? 'Confirmada' : 'Pendiente'}
                                     </span>
                                   </div>
+                                  <p className="text-xs text-slate-500 font-medium">
+                                    Estudiante: <strong className="text-slate-800">{session.studentName || 'Cupo Abierto'}</strong>
+                                  </p>
+                                </div>
 
-                                  {/* Información requerida: Tutor Académico, Carrera, Semestre */}
-                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2 border-t border-slate-200/70 text-xs">
-                                    <div className="flex items-center space-x-2 bg-white p-2.5 rounded-xl border border-slate-200/60">
-                                      <User className="w-4 h-4 text-blue-600 shrink-0" />
-                                      <div className="truncate">
-                                        <span className="text-[10px] font-bold uppercase text-slate-400 block">Tutor Académico</span>
-                                        <span className="font-bold text-slate-800 truncate block">{tutorName}</span>
-                                      </div>
-                                    </div>
-
-                                    <div className="flex items-center space-x-2 bg-white p-2.5 rounded-xl border border-slate-200/60">
-                                      <BookOpen className="w-4 h-4 text-purple-600 shrink-0" />
-                                      <div className="truncate">
-                                        <span className="text-[10px] font-bold uppercase text-slate-400 block">Carrera</span>
-                                        <span className="font-bold text-slate-800 truncate block">{careerName}</span>
-                                      </div>
-                                    </div>
-
-                                    <div className="flex items-center space-x-2 bg-white p-2.5 rounded-xl border border-slate-200/60">
-                                      <Layers className="w-4 h-4 text-emerald-600 shrink-0" />
-                                      <div className="truncate">
-                                        <span className="text-[10px] font-bold uppercase text-slate-400 block">Semestre Pensum</span>
-                                        <span className="font-bold text-slate-800 block">Semestre {semesterNum}</span>
-                                      </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-slate-200/70 text-xs">
+                                  <div className="flex items-center space-x-2 bg-white p-2.5 rounded-xl border border-slate-200/60 truncate">
+                                    <User className="w-4 h-4 text-blue-600 shrink-0" />
+                                    <div className="truncate">
+                                      <span className="text-[10px] font-bold uppercase text-slate-400 block">Tutor</span>
+                                      <span className="font-bold text-slate-800 truncate block">{tutorName}</span>
                                     </div>
                                   </div>
 
-                                  {/* Horario y Fecha */}
-                                  <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
-                                    <div className="flex items-center space-x-1.5">
-                                      <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                                      <span>Fecha: <strong className="text-slate-700">{session.date || 'Por acordar'}</strong></span>
+                                  <div className="flex items-center space-x-2 bg-white p-2.5 rounded-xl border border-slate-200/60 truncate">
+                                    <BookOpen className="w-4 h-4 text-purple-600 shrink-0" />
+                                    <div className="truncate">
+                                      <span className="text-[10px] font-bold uppercase text-slate-400 block">Carrera</span>
+                                      <span className="font-bold text-slate-800 truncate block">{careerName}</span>
                                     </div>
-                                    <div className="flex items-center space-x-1.5">
-                                      <Clock className="w-3.5 h-3.5 text-slate-400" />
-                                      <span>Hora: <strong className="text-slate-700">{session.time || 'Coordinable'}</strong></span>
+                                  </div>
+
+                                  <div className="flex items-center space-x-2 bg-white p-2.5 rounded-xl border border-slate-200/60 truncate">
+                                    <Layers className="w-4 h-4 text-emerald-600 shrink-0" />
+                                    <div className="truncate">
+                                      <span className="text-[10px] font-bold uppercase text-slate-400 block">Semestre</span>
+                                      <span className="font-bold text-slate-800 block">Semestre {semesterNum}</span>
                                     </div>
                                   </div>
                                 </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <div className="text-center py-12 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50 space-y-2.5">
-                            <Activity className="w-10 h-10 text-slate-300 mx-auto" />
-                            <p className="text-sm font-bold text-slate-600">No hay tutorías activas en este momento</p>
-                            <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                              Las solicitudes de los estudiantes y las sesiones confirmadas se listarán automáticamente en este panel.
-                            </p>
-                          </div>
-                        )}
-                      </div>
 
-                      {/* LADO DERECHO (COL-SPAN-5): FORMULARIO PARA ASIGNAR TUTOR A MATERIA */}
-                      <div className="lg:col-span-5 bg-white p-6 rounded-3xl border shadow-sm space-y-4">
-                        <div className="flex items-center space-x-2.5 border-b pb-3">
-                          <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
-                            <UserCheck className="w-5 h-5" />
-                          </div>
-                          <div>
-                            <h3 className="font-black text-lg text-slate-800">Asignar Tutor a Materia</h3>
-                            <p className="text-xs text-slate-500">Asocia tutores a las materias de su carrera</p>
-                          </div>
+                                <div className="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-200/60">
+                                  <div className="flex items-center space-x-1.5">
+                                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                                    <span>Fecha: <strong className="text-slate-700">{session.date || 'Por acordar'}</strong></span>
+                                  </div>
+                                  <div className="flex items-center space-x-1.5">
+                                    <Clock className="w-3.5 h-3.5 text-slate-400" />
+                                    <span>Hora: <strong className="text-slate-700">{session.time || 'Coordinable'}</strong></span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
-
-                        {activeTutors.length === 0 ? (
-                          <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-800 space-y-1">
-                            <p className="font-bold">No hay tutores registrados en el sistema.</p>
-                            <p>Crea o importa tutores en el módulo de Gestión de Usuarios para poder asignarles materias.</p>
-                          </div>
-                        ) : (
-                          <form onSubmit={handleAdminAssignTutorToSubject} className="space-y-4">
-                            {/* 1. Seleccionar Tutor */}
-                            <div>
-                              <label className="block text-xs font-bold uppercase text-slate-600 mb-1.5">
-                                Seleccionar Tutor Académico
-                              </label>
-                              <select
-                                value={currentSelectedTutor?.id || ''}
-                                onChange={(e) => {
-                                  setAdminAssignTutorId(e.target.value);
-                                  const tut = activeTutors.find(u => u.id === e.target.value);
-                                  if (tut) {
-                                    const subs = catalogSubjects.filter(s => s.career?.toLowerCase() === tut.career?.toLowerCase());
-                                    if (subs.length > 0) setAdminAssignSubjectName(subs[0].name);
-                                    else setAdminAssignSubjectName('');
-                                  }
-                                }}
-                                className="w-full p-3 border rounded-xl text-sm bg-white font-medium text-slate-700"
-                                required
-                              >
-                                {activeTutors.map(t => (
-                                  <option key={t.id} value={t.id}>
-                                    {t.name} — {t.career || 'Sin Carrera'}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-
-                            {/* Badge informativo de Carrera */}
-                            <div className="p-3 bg-blue-50 border border-blue-200/80 rounded-xl flex items-center justify-between text-xs">
-                              <div>
-                                <span className="text-[10px] font-bold uppercase text-blue-600 block">Carrera del Tutor:</span>
-                                <span className="font-black text-blue-950 text-sm">{tutorCareer || 'No asignada'}</span>
-                              </div>
-                              <span className="text-[10px] text-blue-700 bg-white border border-blue-200 px-2 py-0.5 rounded-md font-semibold">
-                                Pensum estricto
-                              </span>
-                            </div>
-
-                            {/* 2. Seleccionar Materia del Pensum correspondiente */}
-                            <div>
-                              <div className="flex justify-between items-center mb-1.5">
-                                <label className="block text-xs font-bold uppercase text-slate-600">
-                                  Materia del Pensum ({tutorCareer})
-                                </label>
-                                <span className="text-[10px] text-slate-400 font-semibold">
-                                  {subjectsForTutorCareer.length} disponibles
-                                </span>
-                              </div>
-
-                              {subjectsForTutorCareer.length > 0 ? (
-                                <select
-                                  value={currentSelectedSubject?.name || ''}
-                                  onChange={(e) => setAdminAssignSubjectName(e.target.value)}
-                                  className="w-full p-3 border rounded-xl text-sm bg-white font-bold text-slate-800"
-                                  required
-                                >
-                                  {subjectsForTutorCareer.map(sub => (
-                                    <option key={sub.id} value={sub.name}>
-                                      {sub.name} (Semestre {sub.semester || 1})
-                                    </option>
-                                  ))}
-                                </select>
-                              ) : (
-                                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700">
-                                  No hay materias registradas en el catálogo para la carrera {tutorCareer}. Ve a <strong>RFADM02 - Catálogo Académico</strong> para agregarlas.
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Semestre de la materia */}
-                            {currentSelectedSubject && (
-                              <div className="flex items-center space-x-2 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-200/60">
-                                <Layers className="w-4 h-4 text-slate-400 shrink-0" />
-                                <span>Semestre asignado en pensum: <strong className="text-slate-900 font-bold">Semestre {currentSelectedSubject.semester || 1}</strong></span>
-                              </div>
-                            )}
-
-                            {/* Días y Horarios */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                              <div>
-                                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Días Disponibles</label>
-                                <input
-                                  type="text"
-                                  placeholder="Ej. Lunes a Viernes"
-                                  value={adminAssignDay}
-                                  onChange={e => setAdminAssignDay(e.target.value)}
-                                  className="w-full p-2.5 border rounded-xl text-xs"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Horario Coordinable</label>
-                                <input
-                                  type="text"
-                                  placeholder="Ej. 08:00 AM - 12:00 PM"
-                                  value={adminAssignTime}
-                                  onChange={e => setAdminAssignTime(e.target.value)}
-                                  className="w-full p-2.5 border rounded-xl text-xs"
-                                />
-                              </div>
-                            </div>
-
-                            <button
-                              type="submit"
-                              disabled={subjectsForTutorCareer.length === 0}
-                              className="w-full text-white font-bold py-3 rounded-xl text-sm shadow-md transition hover:opacity-90 flex items-center justify-center space-x-2 disabled:opacity-50"
-                              style={{ backgroundColor: primaryColor }}
-                            >
-                              <UserCheck className="w-4 h-4" />
-                              <span>Asignar Tutor a Materia</span>
-                            </button>
-                          </form>
-                        )}
-
-                        {/* LISTADO DE MATERIAS YA ASIGNADAS A ESTE TUTOR */}
-                        {currentSelectedTutor && (
-                          <div className="pt-3 border-t border-slate-200 space-y-2">
-                            <span className="text-xs font-extrabold uppercase tracking-wider text-slate-600 block">
-                              Materias impartidas por {currentSelectedTutor.name}:
-                            </span>
-                            {(currentSelectedTutor.subjectsDetailed || []).length > 0 ? (
-                              <div className="flex flex-wrap gap-1.5">
-                                {(currentSelectedTutor.subjectsDetailed || []).map(sd => (
-                                  <div
-                                    key={sd.id || sd.name}
-                                    className="inline-flex items-center space-x-1.5 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 border rounded-lg text-xs font-medium text-slate-800 transition"
-                                  >
-                                    <span>{sd.name}</span>
-                                    <span className="text-[10px] text-slate-500 font-bold">(Sem {sd.semester || 1})</span>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleAdminUnassignTutorSubject(currentSelectedTutor.id, sd.name)}
-                                      className="text-slate-400 hover:text-red-600 ml-1"
-                                      title="Desvincular materia"
-                                    >
-                                      <X className="w-3 h-3" />
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-xs text-slate-400 italic">Este tutor aún no tiene materias asignadas.</p>
-                            )}
-                          </div>
-                        )}
-                      </div>
+                      ) : (
+                        <div className="text-center py-16 border-2 border-dashed border-slate-200 rounded-3xl bg-slate-50/50 space-y-3">
+                          <Activity className="w-12 h-12 text-slate-300 mx-auto" />
+                          <p className="text-base font-bold text-slate-700">No hay tutorías activas en este momento</p>
+                          <p className="text-xs text-slate-400 max-w-md mx-auto">
+                            Las ofertas y solicitudes registradas por los miembros del sistema se listarán y actualizarán automáticamente aquí.
+                          </p>
+                        </div>
+                      )}
                     </div>
                   );
                 })()}
@@ -2839,9 +2803,13 @@ export default function App() {
                   const activeTutorSessions = tutorSessions.filter(s => s.status === 'confirmed' || s.status === 'pending');
                   
                   // Materias disponibles del pensum correspondientes a la carrera del tutor
+                  const tutorCareerClean = (currentUser.career || '').trim().toLowerCase();
                   const pensumForTutorCareer = catalogSubjects.filter(
-                    s => s.career?.toLowerCase() === currentUser.career?.toLowerCase()
+                    s => (s.career || '').trim().toLowerCase() === tutorCareerClean
                   ).sort((a, b) => (a.semester || 1) - (b.semester || 1) || a.name.localeCompare(b.name));
+
+                  // Si la carrera del tutor no tiene materias específicas registradas aún, mostrar catálogo para no bloquear
+                  const availableSubjectsForTutor = pensumForTutorCareer.length > 0 ? pensumForTutorCareer : catalogSubjects;
 
                   const pendingRequests = tutorSessions.filter(s => s.status === 'pending');
 
@@ -3053,10 +3021,10 @@ export default function App() {
                                 className="w-full p-3 border rounded-xl text-sm bg-white font-bold text-slate-800"
                                 required
                               >
-                                <option value="">-- Selecciona la materia a impartir --</option>
-                                {pensumForTutorCareer.map(sub => (
+                                <option value="">-- Selecciona la materia a ofertar --</option>
+                                {availableSubjectsForTutor.map(sub => (
                                   <option key={sub.id} value={sub.name}>
-                                    {sub.name} (Semestre {sub.semester || 1})
+                                    {sub.name} (Semestre {sub.semester || 1}${sub.career ? ` - ${sub.career}` : ''})
                                   </option>
                                 ))}
                               </select>
@@ -3158,6 +3126,216 @@ export default function App() {
                           </form>
                         </div>
                       </div>
+                    </div>
+                  );
+                })()}
+
+                {/* SI ES ESTUDIANTE: VISTA DE OFERTAS DISPONIBLES DE SU CARRERA Y SUS TUTORÍAS */}
+                {currentUser.role === 'student' && (() => {
+                  const studentCareerClean = (currentUser.career || '').trim().toLowerCase();
+                  
+                  // Ofertas abiertas de tutorías para la carrera del estudiante
+                  const availableOffers = (sessions || []).filter(s => {
+                    const isOpen = !s.studentId || s.studentId === '' || s.studentName === 'Cupo Disponible (Abierta)';
+                    if (!isOpen) return false;
+                    if (s.status === 'completed' || s.status === 'rejected') return false;
+
+                    const tutorObj = users.find(u => u.id === s.tutorId);
+                    const catalogMatch = catalogSubjects.find(cs => cs.name?.toLowerCase() === s.subject?.toLowerCase());
+                    const sessionCareer = (s.career || catalogMatch?.career || tutorObj?.career || '').trim().toLowerCase();
+
+                    return !sessionCareer || !studentCareerClean || sessionCareer === studentCareerClean;
+                  });
+
+                  // Tutorías activas donde el estudiante ya está inscrito
+                  const studentActiveSessions = (sessions || []).filter(
+                    s => s.studentId === currentUser.id && (s.status === 'confirmed' || s.status === 'pending')
+                  );
+
+                  return (
+                    <div className="space-y-8">
+                      {/* SECCIÓN 1: OFERTAS DE TUTORÍAS DISPONIBLES PARA SU CARRERA */}
+                      <div className="bg-white p-6 sm:p-8 rounded-3xl border shadow-sm space-y-6">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b gap-3">
+                          <div className="flex items-center space-x-3">
+                            <div className="p-2.5 rounded-2xl bg-purple-50 text-purple-600">
+                              <BookOpen className="w-6 h-6" />
+                            </div>
+                            <div>
+                              <h3 className="font-black text-xl text-slate-800">
+                                Ofertas de Tutorías para tu Carrera ({currentUser.career})
+                              </h3>
+                              <p className="text-xs text-slate-500">
+                                Clases y sesiones ofertadas por los docentes tutores listas para inscribirte
+                              </p>
+                            </div>
+                          </div>
+                          <span className="self-start sm:self-auto px-4 py-1.5 rounded-full text-xs font-black bg-purple-100 text-purple-800">
+                            {availableOffers.length} Disponible(s)
+                          </span>
+                        </div>
+
+                        {availableOffers.length > 0 ? (
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                            {availableOffers.map(offer => {
+                              const tutorObj = users.find(u => u.id === offer.tutorId);
+                              const tutorName = tutorObj?.name || offer.tutorName || 'Tutor Docente';
+                              const catalogMatch = catalogSubjects.find(cs => cs.name?.toLowerCase() === offer.subject?.toLowerCase());
+                              const semesterNum = catalogMatch?.semester || 1;
+                              const isVirtual = offer.modality === 'Virtual / Online';
+
+                              return (
+                                <div
+                                  key={offer.id}
+                                  className="rounded-3xl border border-slate-200 bg-slate-50/60 hover:bg-slate-50 p-5 flex flex-col justify-between space-y-4 shadow-xs transition hover:shadow-md group"
+                                >
+                                  <div className="space-y-3.5">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <span className="px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider bg-purple-100 text-purple-800 border border-purple-200">
+                                        Semestre {semesterNum}
+                                      </span>
+                                      <span className={`px-2.5 py-1 rounded-xl text-[10px] font-bold uppercase tracking-wider flex items-center space-x-1 ${
+                                        isVirtual ? 'bg-indigo-100 text-indigo-800 border border-indigo-200' : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                      }`}>
+                                        {isVirtual ? <Video className="w-3 h-3" /> : <MapPin className="w-3 h-3" />}
+                                        <span>{offer.modality || 'Presencial'}</span>
+                                      </span>
+                                    </div>
+
+                                    <div>
+                                      <h4 className="font-black text-base text-slate-900 group-hover:text-purple-600 transition leading-snug">
+                                        {offer.subject}
+                                      </h4>
+                                      <p className="text-xs text-slate-500 font-medium mt-0.5">
+                                        Carrera: <strong className="text-slate-700">{currentUser.career}</strong>
+                                      </p>
+                                    </div>
+
+                                    {/* Perfil del Tutor */}
+                                    <div className="flex items-center space-x-3 bg-white p-3 rounded-2xl border border-slate-200/70">
+                                      <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-200 border-2 border-slate-300 flex items-center justify-center shrink-0 shadow-xs">
+                                        {tutorObj?.avatar ? (
+                                          <img src={tutorObj.avatar} alt={tutorName} className="w-full h-full object-cover" />
+                                        ) : (
+                                          <span className="text-xs font-black text-slate-600">{tutorName.charAt(0)}</span>
+                                        )}
+                                      </div>
+                                      <div className="min-w-0">
+                                        <span className="text-[10px] font-bold uppercase text-slate-400 block">Docente Tutor</span>
+                                        <span className="font-bold text-slate-900 text-xs truncate block">{tutorName}</span>
+                                      </div>
+                                    </div>
+
+                                    {/* Lugar y Horario */}
+                                    <div className="space-y-1.5 text-xs text-slate-600 bg-white/70 p-3 rounded-2xl border border-slate-200/50">
+                                      <div className="flex items-center space-x-2">
+                                        <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                        <span>Fecha: <strong className="text-slate-800">{offer.date}</strong></span>
+                                      </div>
+                                      <div className="flex items-center space-x-2">
+                                        <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                        <span>Hora: <strong className="text-slate-800">{offer.time}</strong></span>
+                                      </div>
+                                      <div className="flex items-center space-x-2 truncate">
+                                        <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                        <span className="truncate">Lugar: <strong className="text-slate-800">{offer.location || 'Sede IUJO'}</strong></span>
+                                      </div>
+                                    </div>
+
+                                    {offer.description && (
+                                      <p className="text-xs text-slate-500 italic bg-purple-50/50 p-2.5 rounded-xl border border-purple-100 line-clamp-2">
+                                        "{offer.description}"
+                                      </p>
+                                    )}
+                                  </div>
+
+                                  <button
+                                    onClick={() => handleStudentEnrollSession(offer)}
+                                    className="w-full text-white font-bold py-3 rounded-2xl text-xs shadow-md transition hover:opacity-90 flex items-center justify-center space-x-2"
+                                    style={{ backgroundColor: primaryColor }}
+                                  >
+                                    <UserCheck className="w-4 h-4" />
+                                    <span>Inscribirme en esta Tutoría</span>
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="text-center py-12 border-2 border-dashed border-slate-200 rounded-3xl bg-slate-50/50 space-y-3">
+                            <BookOpen className="w-12 h-12 text-slate-300 mx-auto" />
+                            <p className="text-sm font-bold text-slate-700">No hay ofertas abiertas para la carrera {currentUser.career} en este momento</p>
+                            <p className="text-xs text-slate-400 max-w-md mx-auto">
+                              Los docentes tutores de tu carrera publicarán ofertas periódicamente. También puedes solicitar tutoría personalizada buscando a los tutores activos.
+                            </p>
+                            <button
+                              onClick={() => setActiveTab('find_tutors')}
+                              className="px-4 py-2.5 text-white font-bold text-xs rounded-xl shadow-xs transition hover:opacity-90 inline-flex items-center space-x-2"
+                              style={{ backgroundColor: primaryColor }}
+                            >
+                              <Search className="w-4 h-4" />
+                              <span>Explorar Directorio de Tutores</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* SECCIÓN 2: MIS TUTORÍAS INSCRITAS Y EN PROCESO */}
+                      {studentActiveSessions.length > 0 && (
+                        <div className="bg-white p-6 sm:p-8 rounded-3xl border shadow-sm space-y-4">
+                          <div className="flex items-center justify-between pb-3 border-b">
+                            <div className="flex items-center space-x-2.5">
+                              <Calendar className="w-5 h-5 text-blue-600" />
+                              <h3 className="font-black text-lg text-slate-800">Mis Tutorías Inscritas y Confirmadas</h3>
+                            </div>
+                            <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-bold">
+                              {studentActiveSessions.length} Activa(s)
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {studentActiveSessions.map(ses => {
+                              const tutorObj = users.find(u => u.id === ses.tutorId);
+                              const isConfirmed = ses.status === 'confirmed';
+
+                              return (
+                                <div key={ses.id} className="p-4 rounded-2xl border bg-slate-50 space-y-3 flex flex-col justify-between">
+                                  <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-xs font-bold text-slate-500">{ses.date} • {ses.time}</span>
+                                      <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase ${
+                                        isConfirmed ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                                      }`}>
+                                        {isConfirmed ? 'Confirmada' : 'Pendiente'}
+                                      </span>
+                                    </div>
+                                    <h4 className="font-black text-sm text-slate-900">{ses.subject}</h4>
+                                    <div className="flex items-center space-x-2 text-xs text-slate-600">
+                                      <User className="w-3.5 h-3.5 text-blue-600" />
+                                      <span>Tutor: <strong>{ses.tutorName}</strong></span>
+                                    </div>
+                                    <div className="flex items-center space-x-2 text-xs text-slate-500">
+                                      <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                                      <span className="truncate">{ses.location || 'Sede IUJO'}</span>
+                                    </div>
+                                  </div>
+
+                                  <button
+                                    onClick={() => {
+                                      setActiveChatSession(ses);
+                                      setActiveTab('messages');
+                                    }}
+                                    className="w-full py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition flex items-center justify-center space-x-1.5 shadow-xs"
+                                  >
+                                    <MessageCircle className="w-3.5 h-3.5" />
+                                    <span>Ir al Chat de la Tutoría</span>
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })()}
@@ -4482,7 +4660,7 @@ export default function App() {
                     </div>
                     <label className="absolute bottom-0 right-0 p-2.5 rounded-full text-white shadow-lg cursor-pointer transition hover:scale-105" style={{ backgroundColor: primaryColor }}>
                       <Camera className="w-5 h-5" />
-                      <input type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" />
+                      <input type="file" accept="image/*,.png,.jpg,.jpeg,.webp,.gif,.svg,.bmp,.ico,.heic,.heif,.avif" onChange={handleAvatarUpload} className="hidden" />
                     </label>
                   </div>
 
