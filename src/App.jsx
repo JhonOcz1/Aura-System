@@ -6,7 +6,7 @@ import {
   Search, Calendar, Download, Filter, Star, PieChart, Camera,
   Palette, Clock, Trash2, ShieldAlert, MessageCircle, CheckCircle,
   XCircle, KeyRound, UserPlus, Bell, X, Mail, Lock, ChevronDown, ChevronRight, Save, Edit3, FileText,
-  TrendingUp, CheckCircle2, Clock3, Upload, UserCheck, UserX, AlertTriangle, Layers, Plus, FileSpreadsheet
+  TrendingUp, CheckCircle2, Clock3, Upload, UserCheck, UserX, AlertTriangle, Layers, Plus, FileSpreadsheet, Video, MapPin, ExternalLink, Info, Send
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -427,27 +427,46 @@ const mapUserToDB = (u) => ({
   subjects_detailed: u.subjectsDetailed || u.subjects_detailed || []
 });
 
-const mapSessionFromDB = (s) => ({
-  ...s,
-  studentId: s.student_id || s.studentId,
-  studentName: s.student_name || s.studentName,
-  tutorId: s.tutor_id || s.tutorId,
-  tutorName: s.tutor_name || s.tutorName,
-  chat: Array.isArray(s.chat) ? s.chat : []
-});
+const mapSessionFromDB = (s) => {
+  const rawChat = Array.isArray(s.chat) ? s.chat : [];
+  const metaObj = rawChat.find(m => m && m.__meta);
+  const cleanChat = rawChat.filter(m => !m || !m.__meta);
 
-const mapSessionToDB = (s) => ({
-  id: s.id,
-  student_id: s.studentId || s.student_id,
-  student_name: s.studentName || s.student_name,
-  tutor_id: s.tutorId || s.tutor_id,
-  tutor_name: s.tutorName || s.tutor_name,
-  subject: s.subject,
-  date: s.date,
-  time: s.time,
-  status: s.status,
-  chat: s.chat || []
-});
+  return {
+    ...s,
+    studentId: s.student_id || s.studentId,
+    studentName: s.student_name || s.studentName,
+    tutorId: s.tutor_id || s.tutorId,
+    tutorName: s.tutor_name || s.tutorName,
+    modality: s.modality || metaObj?.modality || 'Presencial',
+    location: s.location || metaObj?.location || (metaObj?.modality === 'Virtual / Online' ? 'Google Meet / Enlace en Chat' : 'Sede IUJO'),
+    description: s.description || metaObj?.description || '',
+    chat: cleanChat
+  };
+};
+
+const mapSessionToDB = (s) => {
+  const metaObj = {
+    __meta: true,
+    modality: s.modality || 'Presencial',
+    location: s.location || (s.modality === 'Virtual / Online' ? 'Google Meet / Enlace en Chat' : 'Sede IUJO'),
+    description: s.description || ''
+  };
+  const cleanChat = (Array.isArray(s.chat) ? s.chat : []).filter(m => !m || !m.__meta);
+
+  return {
+    id: s.id,
+    student_id: s.studentId || s.student_id || '',
+    student_name: s.studentName || s.student_name || 'Cupo Abierto',
+    tutor_id: s.tutorId || s.tutor_id,
+    tutor_name: s.tutorName || s.tutor_name,
+    subject: s.subject,
+    date: s.date,
+    time: s.time,
+    status: s.status,
+    chat: [metaObj, ...cleanChat]
+  };
+};
 
 const mapAuditFromDB = (a) => ({
   ...a,
@@ -615,6 +634,17 @@ export default function App() {
   const [adminAssignSubjectName, setAdminAssignSubjectName] = useState('');
   const [adminAssignDay, setAdminAssignDay] = useState('Lunes a Viernes');
   const [adminAssignTime, setAdminAssignTime] = useState('Horario coordinable');
+  // Estados para Rol de Tutor, Gestión Histórica de Tutorías y Mensajes
+  const [selectedStudentForInfo, setSelectedStudentForInfo] = useState(null);
+  const [tutorNewTutSubject, setTutorNewTutSubject] = useState('');
+  const [tutorNewTutDate, setTutorNewTutDate] = useState('');
+  const [tutorNewTutTime, setTutorNewTutTime] = useState('');
+  const [tutorNewTutModality, setTutorNewTutModality] = useState('Presencial');
+  const [tutorNewTutLocation, setTutorNewTutLocation] = useState('');
+  const [tutorNewTutDescription, setTutorNewTutDescription] = useState('');
+  const [sessionsFilterStatus, setSessionsFilterStatus] = useState('all');
+  const [messagesSearchQuery, setMessagesSearchQuery] = useState('');
+
 
 
 
@@ -1269,6 +1299,105 @@ export default function App() {
     }
   };
 
+  
+  // Función para que el Tutor cree una nueva oferta de tutoría desde su panel principal
+  const handleTutorCreateSession = async (e) => {
+    e.preventDefault();
+    if (!tutorNewTutSubject) {
+      showToast('Por favor selecciona una materia de tu carrera asignada', 'danger');
+      return;
+    }
+    if (!tutorNewTutDate || !tutorNewTutTime) {
+      showToast('Ingresa la fecha y hora de la tutoría', 'danger');
+      return;
+    }
+
+    const newId = `ses_${Date.now()}`;
+    const newSession = {
+      id: newId,
+      studentId: '',
+      studentName: 'Cupo Disponible (Abierta)',
+      tutorId: currentUser.id,
+      tutorName: currentUser.name,
+      subject: tutorNewTutSubject,
+      date: tutorNewTutDate,
+      time: tutorNewTutTime,
+      modality: tutorNewTutModality || 'Presencial',
+      location: tutorNewTutModality === 'Virtual / Online' 
+        ? (tutorNewTutLocation.trim() || 'Google Meet / Enlace en Chat') 
+        : (tutorNewTutLocation.trim() || 'Sede IUJO'),
+      description: tutorNewTutDescription.trim() || 'Tutoría programada por el tutor académico.',
+      status: 'confirmed',
+      chat: [
+        {
+          id: `msg_sys_${Date.now()}`,
+          sender: 'Sistema',
+          senderRole: 'system',
+          text: `Tutoría creada por el docente ${currentUser.name}. Modalidad: ${tutorNewTutModality}.`,
+          time: getVenezuelaTimeString()
+        }
+      ]
+    };
+
+    try {
+      const { error } = await supabase.from('sessions').insert([mapSessionToDB(newSession)]);
+      if (error) {
+        showToast('Error al registrar la tutoría en la base de datos: ' + error.message, 'danger');
+        return;
+      }
+      setSessions(prev => [newSession, ...prev]);
+      await logAudit(
+        currentUser.name,
+        'TUTORÍA CREADA',
+        `Tutoría de ${tutorNewTutSubject} creada para el ${tutorNewTutDate} a las ${tutorNewTutTime} (${tutorNewTutModality})`
+      );
+      showToast(`¡Tutoría de "${tutorNewTutSubject}" creada exitosamente!`);
+      setTutorNewTutDescription('');
+      setTutorNewTutLocation('');
+    } catch (err) {
+      console.error(err);
+      showToast('Error de conexión al guardar la tutoría', 'danger');
+    }
+  };
+
+  // Función para marcar tutoría como completada
+  const handleMarkSessionCompleted = async (sessionObj) => {
+    if (!window.confirm(`¿Confirmar que la tutoría de "${sessionObj.subject}" con ${sessionObj.studentName} ha finalizado con éxito?`)) {
+      return;
+    }
+
+    const updated = { ...sessionObj, status: 'completed' };
+    setSessions(prev => prev.map(s => s.id === sessionObj.id ? updated : s));
+    if (activeChatSession && activeChatSession.id === sessionObj.id) {
+      setActiveChatSession(updated);
+    }
+
+    try {
+      const { error } = await supabase.from('sessions').update({ status: 'completed' }).eq('id', sessionObj.id);
+      if (error) {
+        showToast('Error al actualizar el estado en base de datos: ' + error.message, 'danger');
+        return;
+      }
+      if (sessionObj.studentId) {
+        await addNotification(
+          sessionObj.studentId,
+          'Tutoría Finalizada - Califica la Clase',
+          `Tu tutor ${currentUser.name} ha completado la tutoría de ${sessionObj.subject}. Por favor califica su atención.`,
+          sessionObj.id,
+          'rate_tutor'
+        );
+      }
+      await logAudit(
+        currentUser.name,
+        'TUTORÍA COMPLETADA',
+        `Se finalizó la tutoría de ${sessionObj.subject} con ${sessionObj.studentName}`
+      );
+      showToast('Tutoría completada con éxito.');
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleRatingSubmit = async (e) => {
     e.preventDefault();
     if (!sessionToRate) return;
@@ -1351,17 +1480,49 @@ export default function App() {
   };
 
   const handleAcceptSessionRequest = async (sessionObj) => {
-    setSessions(prev => prev.map(s => s.id === sessionObj.id ? { ...s, status: 'confirmed' } : s));
+    const currentChat = (sessionObj.chat || []).filter(m => !m || !m.__meta);
+    const initChat = currentChat.length > 0 ? currentChat : [
+      {
+        id: `msg_sys_${Date.now()}`,
+        sender: 'Sistema',
+        senderRole: 'system',
+        text: `Tutoría aceptada por el tutor ${currentUser.name}. El canal de comunicación inmutable ha sido habilitado.`,
+        time: getVenezuelaTimeString()
+      }
+    ];
+
+    const updatedSession = { ...sessionObj, status: 'confirmed', chat: initChat };
+    setSessions(prev => prev.map(s => s.id === sessionObj.id ? updatedSession : s));
     setPendingRequestToReview(null);
+    if (activeChatSession && activeChatSession.id === sessionObj.id) {
+      setActiveChatSession(updatedSession);
+    }
+
     try {
-      const { error } = await supabase.from('sessions').update({ status: 'confirmed' }).eq('id', sessionObj.id);
+      const metaObj = {
+        __meta: true,
+        modality: sessionObj.modality || 'Presencial',
+        location: sessionObj.location || 'Sede IUJO',
+        description: sessionObj.description || ''
+      };
+      const { error } = await supabase.from('sessions').update({
+        status: 'confirmed',
+        chat: [metaObj, ...initChat]
+      }).eq('id', sessionObj.id);
+
       if (error) {
-        showToast('Error al actualizar en la base de datos', 'danger');
+        showToast('Error al actualizar en la base de datos: ' + error.message, 'danger');
         return;
       }
-      await addNotification(sessionObj.studentId, 'Tutoría Confirmada', `Tu tutor ${currentUser.name} ha aceptado tu tutoría de ${sessionObj.subject}.`, sessionObj.id, 'general');
-      await logAudit(currentUser.name, 'TUTORÍA ACEPTADA', `Aceptó la solicitud de ${sessionObj.studentName}`);
-      showToast('¡Tutoría aceptada con éxito!');
+      await addNotification(
+        sessionObj.studentId,
+        'Tutoría Aceptada y Confirmada',
+        `Tu tutor ${currentUser.name} ha aceptado tu tutoría de ${sessionObj.subject}. Ya puedes comunicarte a través del módulo de Mensajes.`,
+        sessionObj.id,
+        'general'
+      );
+      await logAudit(currentUser.name, 'TUTORÍA ACEPTADA', `Aceptó la solicitud de ${sessionObj.studentName} para la materia ${sessionObj.subject}`);
+      showToast('¡Tutoría aceptada! Canal de chat inmutable habilitado.');
     } catch (e) {
       console.error(e);
     }
@@ -2163,6 +2324,26 @@ export default function App() {
               )}
 
               {currentUser.role !== 'admin' && (
+                <button
+                  onClick={() => {
+                    setActiveTab('messages');
+                    if (!activeChatSession) {
+                      const userSessions = sessions.filter(s =>
+                        (currentUser.role === 'tutor' ? s.tutorId === currentUser.id : s.studentId === currentUser.id) &&
+                        (s.status === 'confirmed' || s.status === 'completed')
+                      );
+                      if (userSessions.length > 0) setActiveChatSession(userSessions[0]);
+                    }
+                  }}
+                  className={`px-5 py-2.5 rounded-xl text-sm font-bold transition flex items-center space-x-2.5 shrink-0 ${activeTab === 'messages' ? 'text-white shadow-md' : 'text-slate-700 hover:bg-slate-100'}`}
+                  style={activeTab === 'messages' ? { backgroundColor: primaryColor } : {}}
+                >
+                  <MessageCircle className="w-4.5 h-4.5 shrink-0" />
+                  <span className="whitespace-nowrap">Mensajes</span>
+                </button>
+              )}
+
+              {currentUser.role !== 'admin' && (
                 <button onClick={() => setActiveTab('profile')} className={`px-5 py-2.5 rounded-xl text-sm font-bold transition flex items-center space-x-2.5 shrink-0 ${activeTab === 'profile' ? 'text-white shadow-md' : 'text-slate-700 hover:bg-slate-100'}`} style={activeTab === 'profile' ? { backgroundColor: primaryColor } : {}}>
                   <User className="w-4.5 h-4.5 shrink-0" /> <span className="whitespace-nowrap">Mi Perfil</span>
                 </button>
@@ -2476,6 +2657,334 @@ export default function App() {
                     </div>
                   );
                 })()}
+                {/* SI ES TUTOR: VISTA DISTRIBUIDA (TUTORÍAS PROPIAS A LA IZQUIERDA Y MINI FORMULARIO A LA DERECHA) */}
+                {currentUser.role === 'tutor' && (() => {
+                  const tutorSessions = (sessions || []).filter(s => s.tutorId === currentUser.id);
+                  const activeTutorSessions = tutorSessions.filter(s => s.status === 'confirmed' || s.status === 'pending');
+                  
+                  // Materias disponibles del pensum correspondientes a la carrera del tutor
+                  const pensumForTutorCareer = catalogSubjects.filter(
+                    s => s.career?.toLowerCase() === currentUser.career?.toLowerCase()
+                  ).sort((a, b) => (a.semester || 1) - (b.semester || 1) || a.name.localeCompare(b.name));
+
+                  const pendingRequests = tutorSessions.filter(s => s.status === 'pending');
+
+                  return (
+                    <div className="space-y-6">
+                      {/* ALERTA DE SOLICITUDES PENDIENTES SI EXISTEN */}
+                      {pendingRequests.length > 0 && (
+                        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                          <div className="flex items-center space-x-2.5">
+                            <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
+                            <div>
+                              <span className="font-black text-amber-900 block text-sm">
+                                Tienes {pendingRequests.length} solicitud(es) de tutoría pendiente(s) por responder
+                              </span>
+                              <span className="text-amber-700">Revisa la información del estudiante y acéptala para activar el chat inmutable.</span>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => setActiveTab('sessions')}
+                            className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl shrink-0 transition shadow-xs"
+                          >
+                            Gestionar Solicitudes
+                          </button>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                        {/* LADO IZQUIERDO: TUTORÍAS PROPIAS */}
+                        <div className="lg:col-span-7 bg-white p-6 rounded-3xl border shadow-sm space-y-4">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b gap-2">
+                            <div className="flex items-center space-x-2.5">
+                              <div className="p-2 rounded-xl bg-blue-50 text-blue-600">
+                                <Calendar className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <h3 className="font-black text-lg text-slate-800">Mis Tutorías Asignadas</h3>
+                                <p className="text-xs text-slate-500">Tutorías activas, programadas y solicitudes en curso</p>
+                              </div>
+                            </div>
+                            <span className="self-start sm:self-auto px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
+                              {activeTutorSessions.length} Activa(s)
+                            </span>
+                          </div>
+
+                          {activeTutorSessions.length > 0 ? (
+                            <div className="space-y-3.5 max-h-[620px] overflow-y-auto pr-1">
+                              {activeTutorSessions.map(session => {
+                                const studentObj = users.find(u => u.id === session.studentId) || {
+                                  name: session.studentName || 'Estudiante Interesado',
+                                  email: 'estudiante@gmail.com',
+                                  career: currentUser.career,
+                                  cedula: 'No especificada',
+                                  phone: 'No especificado'
+                                };
+                                const isPending = session.status === 'pending';
+                                const isConfirmed = session.status === 'confirmed';
+
+                                return (
+                                  <div
+                                    key={session.id}
+                                    className="p-4.5 rounded-2xl border border-slate-200 bg-slate-50/80 hover:bg-slate-50 transition space-y-3 shadow-xs"
+                                  >
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="space-y-1">
+                                        <div className="flex items-center space-x-2">
+                                          <h4 className="font-black text-base text-slate-900 leading-snug">{session.subject}</h4>
+                                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-700">
+                                            {session.modality || 'Presencial'}
+                                          </span>
+                                        </div>
+                                        <p className="text-xs text-slate-600 flex items-center space-x-1.5">
+                                          <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                          <span>Lugar / Vía: <strong className="text-slate-800">{session.location || 'Sede IUJO'}</strong></span>
+                                        </p>
+                                      </div>
+
+                                      <span className={`px-2.5 py-1 rounded-xl text-[11px] font-black uppercase tracking-wider shrink-0 ${
+                                        isConfirmed ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-amber-100 text-amber-800 border border-amber-200'
+                                      }`}>
+                                        {isConfirmed ? 'Confirmada' : 'Pendiente'}
+                                      </span>
+                                    </div>
+
+                                    {/* Información del Estudiante */}
+                                    <div className="p-3 bg-white rounded-xl border border-slate-200/70 flex items-center justify-between gap-2">
+                                      <div className="flex items-center space-x-2.5 min-w-0">
+                                        <div className="w-8 h-8 rounded-full overflow-hidden bg-slate-200 border border-slate-300 flex items-center justify-center shrink-0">
+                                          {studentObj.avatar ? (
+                                            <img src={studentObj.avatar} alt={studentObj.name} className="w-full h-full object-cover" />
+                                          ) : (
+                                            <span className="text-xs font-black text-slate-600">{studentObj.name?.charAt(0) || 'E'}</span>
+                                          )}
+                                        </div>
+                                        <div className="min-w-0">
+                                          <span className="text-[10px] font-bold uppercase text-slate-400 block">Estudiante</span>
+                                          <span className="text-xs font-bold text-slate-800 block truncate">{studentObj.name}</span>
+                                        </div>
+                                      </div>
+
+                                      {session.studentId && (
+                                        <button
+                                          type="button"
+                                          onClick={() => setSelectedStudentForInfo(studentObj)}
+                                          className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs flex items-center space-x-1 transition shrink-0"
+                                          title="Ver ficha completa del estudiante"
+                                        >
+                                          <Info className="w-3.5 h-3.5" />
+                                          <span>Ver Estudiante</span>
+                                        </button>
+                                      )}
+                                    </div>
+
+                                    {/* Mensaje / Descripción del tutor */}
+                                    {session.description && (
+                                      <p className="text-xs text-slate-600 bg-slate-100/70 p-2.5 rounded-xl border border-slate-200/50 italic">
+                                        "{session.description}"
+                                      </p>
+                                    )}
+
+                                    {/* Fecha, Hora y Acciones */}
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-2 border-t border-slate-200/70 gap-2 text-xs">
+                                      <div className="flex items-center space-x-3 text-slate-600">
+                                        <span className="flex items-center space-x-1"><Calendar className="w-3.5 h-3.5 text-slate-400" /> <strong>{session.date || 'Por acordar'}</strong></span>
+                                        <span className="flex items-center space-x-1"><Clock className="w-3.5 h-3.5 text-slate-400" /> <strong>{session.time || 'Coordinable'}</strong></span>
+                                      </div>
+
+                                      <div className="flex items-center space-x-2">
+                                        {isPending && (
+                                          <>
+                                            <button
+                                              onClick={() => handleAcceptSessionRequest(session)}
+                                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition text-xs shadow-xs"
+                                            >
+                                              Aceptar
+                                            </button>
+                                            <button
+                                              onClick={() => handleRejectSessionRequest(session)}
+                                              className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 font-bold rounded-xl transition text-xs"
+                                            >
+                                              Rechazar
+                                            </button>
+                                          </>
+                                        )}
+
+                                        {isConfirmed && (
+                                          <>
+                                            <button
+                                              onClick={() => {
+                                                setActiveChatSession(session);
+                                                setActiveTab('messages');
+                                              }}
+                                              className="px-3 py-1.5 rounded-xl text-white font-bold text-xs transition flex items-center space-x-1 shadow-xs"
+                                              style={{ backgroundColor: primaryColor }}
+                                            >
+                                              <MessageCircle className="w-3.5 h-3.5" />
+                                              <span>Abrir Chat</span>
+                                            </button>
+                                            <button
+                                              onClick={() => handleMarkSessionCompleted(session)}
+                                              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition text-xs border"
+                                            >
+                                              Finalizar
+                                            </button>
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="text-center py-12 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50 space-y-2">
+                              <Calendar className="w-10 h-10 text-slate-300 mx-auto" />
+                              <p className="text-sm font-bold text-slate-600">Aún no tienes tutorías registradas</p>
+                              <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                                Publica una nueva tutoría en el formulario de la derecha para que los estudiantes puedan reservar y solicitar asesoría.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* LADO DERECHO: MINI FORMULARIO PARA CREAR NUEVA TUTORÍA */}
+                        <div className="lg:col-span-5 bg-white p-6 rounded-3xl border shadow-sm space-y-4">
+                          <div className="flex items-center space-x-2.5 border-b pb-3">
+                            <div className="p-2 rounded-xl bg-purple-50 text-purple-600">
+                              <Plus className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <h3 className="font-black text-lg text-slate-800">Crear Nueva Tutoría</h3>
+                              <p className="text-xs text-slate-500">Oferta una sesión basada en el pensum de tu carrera</p>
+                            </div>
+                          </div>
+
+                          <form onSubmit={handleTutorCreateSession} className="space-y-4">
+                            {/* Selección de materia del pensum de su carrera */}
+                            <div>
+                              <div className="flex justify-between items-center mb-1.5">
+                                <label className="block text-xs font-bold uppercase text-slate-600">
+                                  Materia del Pensum ({currentUser.career})
+                                </label>
+                                <span className="text-[10px] text-purple-700 font-bold bg-purple-50 px-2 py-0.5 rounded-md">
+                                  {pensumForTutorCareer.length} disponibles
+                                </span>
+                              </div>
+                              <select
+                                value={tutorNewTutSubject}
+                                onChange={e => setTutorNewTutSubject(e.target.value)}
+                                className="w-full p-3 border rounded-xl text-sm bg-white font-bold text-slate-800"
+                                required
+                              >
+                                <option value="">-- Selecciona la materia a impartir --</option>
+                                {pensumForTutorCareer.map(sub => (
+                                  <option key={sub.id} value={sub.name}>
+                                    {sub.name} (Semestre {sub.semester || 1})
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            {/* Fecha y Hora */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div>
+                                <label className="block text-xs font-bold uppercase text-slate-600 mb-1.5">Fecha</label>
+                                <input
+                                  type="date"
+                                  min={todayDateFormatted}
+                                  value={tutorNewTutDate}
+                                  onChange={e => setTutorNewTutDate(e.target.value)}
+                                  className="w-full p-3 border rounded-xl text-xs font-medium"
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-bold uppercase text-slate-600 mb-1.5">Hora</label>
+                                <input
+                                  type="time"
+                                  value={tutorNewTutTime}
+                                  onChange={e => setTutorNewTutTime(e.target.value)}
+                                  className="w-full p-3 border rounded-xl text-xs font-medium"
+                                  required
+                                />
+                              </div>
+                            </div>
+
+                            {/* Modalidad */}
+                            <div>
+                              <label className="block text-xs font-bold uppercase text-slate-600 mb-1.5">Modalidad de Tutoría</label>
+                              <div className="grid grid-cols-2 gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setTutorNewTutModality('Presencial')}
+                                  className={`py-2.5 px-3 rounded-xl font-bold text-xs border transition flex items-center justify-center space-x-1.5 ${
+                                    tutorNewTutModality === 'Presencial'
+                                      ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                                      : 'bg-white text-slate-700 hover:bg-slate-50 border-slate-200'
+                                  }`}
+                                >
+                                  <MapPin className="w-4 h-4" />
+                                  <span>Presencial</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setTutorNewTutModality('Virtual / Online')}
+                                  className={`py-2.5 px-3 rounded-xl font-bold text-xs border transition flex items-center justify-center space-x-1.5 ${
+                                    tutorNewTutModality === 'Virtual / Online'
+                                      ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                                      : 'bg-white text-slate-700 hover:bg-slate-50 border-slate-200'
+                                  }`}
+                                >
+                                  <Video className="w-4 h-4" />
+                                  <span>Online / Virtual</span>
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Lugar en caso de ser presencial o enlace si es virtual */}
+                            <div>
+                              <label className="block text-xs font-bold uppercase text-slate-600 mb-1.5">
+                                {tutorNewTutModality === 'Presencial' ? 'Lugar / Aula donde se realizará' : 'Plataforma o Enlace Virtual'}
+                              </label>
+                              <input
+                                type="text"
+                                placeholder={tutorNewTutModality === 'Presencial' ? 'Ej. Aula 104, Sede Central IUJO' : 'Ej. Google Meet (se compartirá en el chat)'}
+                                value={tutorNewTutLocation}
+                                onChange={e => setTutorNewTutLocation(e.target.value)}
+                                className="w-full p-3 border rounded-xl text-sm font-medium"
+                                required
+                              />
+                            </div>
+
+                            {/* Descripción o cuadro de texto para agregar el mensaje en cuestión */}
+                            <div>
+                              <label className="block text-xs font-bold uppercase text-slate-600 mb-1.5">
+                                Mensaje o Indicaciones del Tutor
+                              </label>
+                              <textarea
+                                rows={3}
+                                placeholder="Describe los temas a tratar, requisitos o indicaciones para los estudiantes..."
+                                value={tutorNewTutDescription}
+                                onChange={e => setTutorNewTutDescription(e.target.value)}
+                                className="w-full p-3 border rounded-xl text-xs font-medium resize-none"
+                              ></textarea>
+                            </div>
+
+                            <button
+                              type="submit"
+                              className="w-full text-white font-bold py-3.5 rounded-xl text-sm shadow-md transition hover:opacity-90 flex items-center justify-center space-x-2"
+                              style={{ backgroundColor: primaryColor }}
+                            >
+                              <Plus className="w-4 h-4" />
+                              <span>Publicar y Ofertar Tutoría</span>
+                            </button>
+                          </form>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
@@ -2549,8 +3058,19 @@ export default function App() {
                       {users.map(u => (
                         <tr key={u.id} className="hover:bg-slate-50/60 transition">
                           <td className="p-3.5 font-semibold text-slate-900">
-                            {u.name}
-                            <span className="block text-xs text-slate-500 font-normal">{u.email}</span>
+                            <div className="flex items-center space-x-3">
+                              <div className="w-9 h-9 rounded-full overflow-hidden bg-slate-200 border border-slate-300 flex items-center justify-center shrink-0 shadow-xs">
+                                {u.avatar ? (
+                                  <img src={u.avatar} alt={u.name} className="w-full h-full object-cover" />
+                                ) : (
+                                  <span className="text-xs font-black text-slate-600">{u.name?.charAt(0) || 'U'}</span>
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <span className="font-bold text-slate-900 block truncate">{u.name}</span>
+                                <span className="text-xs text-slate-500 font-normal block truncate">{u.email}</span>
+                              </div>
+                            </div>
                           </td>
 
                           <td className="p-3.5">
@@ -3538,7 +4058,241 @@ export default function App() {
               </div>
             )}
 
-            {activeTab === 'profile' && currentUser.role !== 'admin' && (
+
+            {/* MÓDULO DE MENSAJES (CANAL DE CHAT INMUTABLE TUTOR-ESTUDIANTE) */}
+            {activeTab === 'messages' && currentUser.role !== 'admin' && (() => {
+              const eligibleSessions = sessions.filter(s =>
+                (currentUser.role === 'tutor' ? s.tutorId === currentUser.id : s.studentId === currentUser.id) &&
+                (s.status === 'confirmed' || s.status === 'completed')
+              );
+
+              const currentConversation = eligibleSessions.find(s => activeChatSession && s.id === activeChatSession.id) || eligibleSessions[0];
+              const partnerUser = currentConversation ? (
+                users.find(u => u.id === (currentUser.role === 'tutor' ? currentConversation.studentId : currentConversation.tutorId)) || {
+                  name: currentUser.role === 'tutor' ? (currentConversation.studentName || 'Estudiante') : (currentConversation.tutorName || 'Tutor'),
+                  career: currentUser.career,
+                  email: 'contacto@iujo.edu.ve'
+                }
+              ) : null;
+
+              const cleanMessages = currentConversation ? (currentConversation.chat || []).filter(m => !m || !m.__meta) : [];
+
+              return (
+                <div className="bg-white rounded-3xl border shadow-sm overflow-hidden flex flex-col md:flex-row h-[750px]">
+                  {/* BARRA LATERAL: LISTADO DE CONVERSACIONES */}
+                  <div className="w-full md:w-80 border-r border-slate-200 flex flex-col bg-slate-50/50">
+                    <div className="p-4 border-b border-slate-200 space-y-2.5 bg-white">
+                      <div className="flex items-center justify-between">
+                        <h2 className="text-lg font-black text-slate-800">Mensajes</h2>
+                        <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                          {eligibleSessions.length} Chat(s)
+                        </span>
+                      </div>
+                      <div className="relative">
+                        <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                        <input
+                          type="text"
+                          placeholder="Buscar conversación..."
+                          value={messagesSearchQuery}
+                          onChange={e => setMessagesSearchQuery(e.target.value)}
+                          className="w-full pl-8 pr-3 py-2 border rounded-xl text-xs bg-slate-50 font-medium"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto divide-y divide-slate-100 p-2 space-y-1">
+                      {eligibleSessions.length > 0 ? (
+                        eligibleSessions
+                          .filter(s => {
+                            if (!messagesSearchQuery.trim()) return true;
+                            const q = messagesSearchQuery.toLowerCase();
+                            return (s.subject || '').toLowerCase().includes(q) ||
+                                   (s.tutorName || '').toLowerCase().includes(q) ||
+                                   (s.studentName || '').toLowerCase().includes(q);
+                          })
+                          .map(session => {
+                            const isSelected = currentConversation && session.id === currentConversation.id;
+                            const otherParty = users.find(u => u.id === (currentUser.role === 'tutor' ? session.studentId : session.tutorId));
+                            const otherName = otherParty?.name || (currentUser.role === 'tutor' ? session.studentName : session.tutorName) || 'Usuario';
+                            const chatMsgs = (session.chat || []).filter(m => !m || !m.__meta);
+                            const lastMsg = chatMsgs.length > 0 ? chatMsgs[chatMsgs.length - 1] : null;
+
+                            return (
+                              <div
+                                key={session.id}
+                                onClick={() => setActiveChatSession(session)}
+                                className={`p-3 rounded-2xl cursor-pointer transition flex items-center space-x-3 ${
+                                  isSelected ? 'bg-white shadow-xs border border-slate-200' : 'hover:bg-slate-100/70'
+                                }`}
+                              >
+                                <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-200 border border-slate-300 flex items-center justify-center shrink-0">
+                                  {otherParty?.avatar ? (
+                                    <img src={otherParty.avatar} alt={otherName} className="w-full h-full object-cover" />
+                                  ) : (
+                                    <span className="text-xs font-black text-slate-600">{otherName.charAt(0)}</span>
+                                  )}
+                                </div>
+
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center justify-between">
+                                    <h4 className="text-xs font-bold text-slate-900 truncate">{otherName}</h4>
+                                    <span className="text-[10px] text-slate-400 shrink-0">{lastMsg?.time || ''}</span>
+                                  </div>
+                                  <p className="text-[11px] font-semibold text-blue-700 truncate">{session.subject}</p>
+                                  <p className="text-[11px] text-slate-500 truncate">
+                                    {lastMsg ? `${lastMsg.sender === currentUser.name ? 'Tú: ' : ''}${lastMsg.text}` : 'Canal habilitado'}
+                                  </p>
+                                </div>
+                              </div>
+                            );
+                          })
+                      ) : (
+                        <div className="p-6 text-center text-xs text-slate-400 space-y-1">
+                          <MessageCircle className="w-8 h-8 text-slate-300 mx-auto mb-1" />
+                          <p className="font-semibold text-slate-600">No hay chats activos</p>
+                          <p>Los canales de chat se activan automáticamente al aceptar una solicitud de tutoría.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* PANEL PRINCIPAL DEL CHAT INMUTABLE */}
+                  <div className="flex-1 flex flex-col bg-white">
+                    {currentConversation && partnerUser ? (
+                      <>
+                        {/* Cabecera del chat */}
+                        <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/60">
+                          <div className="flex items-center space-x-3 min-w-0">
+                            <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-200 border-2 border-slate-300 flex items-center justify-center shrink-0 shadow-xs">
+                              {partnerUser.avatar ? (
+                                <img src={partnerUser.avatar} alt={partnerUser.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <span className="text-sm font-black text-slate-600">{partnerUser.name?.charAt(0) || 'U'}</span>
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center space-x-2">
+                                <h3 className="font-black text-sm sm:text-base text-slate-900 truncate">{partnerUser.name}</h3>
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white border text-slate-600 shrink-0">
+                                  {partnerUser.career || 'IUJO'}
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-500 truncate">
+                                Materia: <strong className="text-slate-800">{currentConversation.subject}</strong> • {currentConversation.modality || 'Presencial'} ({currentConversation.location || 'Sede'})
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center space-x-2">
+                            {currentUser.role === 'tutor' && currentConversation.studentId && (
+                              <button
+                                type="button"
+                                onClick={() => setSelectedStudentForInfo(partnerUser)}
+                                className="px-2.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold transition flex items-center space-x-1"
+                                title="Ver detalles del estudiante"
+                              >
+                                <Info className="w-3.5 h-3.5" />
+                                <span className="hidden sm:inline">Ficha</span>
+                              </button>
+                            )}
+                            <span className={`px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider ${
+                              currentConversation.status === 'completed'
+                                ? 'bg-blue-100 text-blue-800'
+                                : 'bg-emerald-100 text-emerald-800'
+                            }`}>
+                              {currentConversation.status === 'completed' ? 'Finalizada' : 'En Curso'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Aviso institucional de inmutabilidad */}
+                        <div className="px-4 py-2 bg-slate-100/70 border-b border-slate-200 text-[11px] text-slate-500 flex items-center justify-center space-x-1.5 font-medium">
+                          <ShieldCheck className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                          <span>Registro inmutable institucional: los mensajes se archivan permanentemente para auditoría y no pueden ser eliminados.</span>
+                        </div>
+
+                        {/* Área de mensajes con scroll */}
+                        <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-3 bg-slate-50/40">
+                          {cleanMessages.length > 0 ? (
+                            cleanMessages.map((msg, idx) => {
+                              const isMe = msg.sender === currentUser.name;
+                              const isSystem = msg.senderRole === 'system' || msg.sender === 'Sistema';
+
+                              if (isSystem) {
+                                return (
+                                  <div key={idx} className="flex justify-center my-2">
+                                    <div className="px-3.5 py-1.5 rounded-full bg-slate-200/80 text-[11px] font-semibold text-slate-700 shadow-2xs text-center max-w-md">
+                                      {msg.text}
+                                    </div>
+                                  </div>
+                                );
+                              }
+
+                              return (
+                                <div
+                                  key={idx}
+                                  className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
+                                >
+                                  <div
+                                    className={`p-3.5 rounded-2xl text-xs sm:text-sm max-w-[82%] shadow-xs space-y-1 ${
+                                      isMe
+                                        ? 'text-white rounded-tr-none'
+                                        : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none'
+                                    }`}
+                                    style={isMe ? { backgroundColor: primaryColor } : {}}
+                                  >
+                                    <strong className={`block text-[11px] ${isMe ? 'text-white/80' : 'text-slate-500'}`}>
+                                      {isMe ? 'Tú' : msg.sender}
+                                    </strong>
+                                    <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
+                                  </div>
+                                  <span className="text-[10px] text-slate-400 mt-1 px-1">
+                                    {msg.time}
+                                  </span>
+                                </div>
+                              );
+                            })
+                          ) : (
+                            <div className="h-full flex items-center justify-center text-center text-xs text-slate-400 p-6">
+                              <p>Aún no hay mensajes en esta tutoría. Escribe el primer mensaje a continuación.</p>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Barra de entrada de texto */}
+                        <form onSubmit={handleSendChatMessage} className="p-3.5 border-t border-slate-200 flex items-center space-x-2 bg-white">
+                          <input
+                            type="text"
+                            placeholder="Escribe un mensaje seguro e inmutable..."
+                            value={chatMessageText}
+                            onChange={e => setChatMessageText(e.target.value)}
+                            className="flex-1 p-3 border rounded-xl text-xs sm:text-sm font-medium outline-none focus:border-blue-500 transition"
+                          />
+                          <button
+                            type="submit"
+                            disabled={!chatMessageText.trim()}
+                            className="p-3 rounded-xl text-white font-bold transition shadow-sm hover:opacity-90 disabled:opacity-40 flex items-center justify-center"
+                            style={{ backgroundColor: primaryColor }}
+                          >
+                            <Send className="w-4 h-4" />
+                          </button>
+                        </form>
+                      </>
+                    ) : (
+                      <div className="h-full flex flex-col items-center justify-center p-8 text-center text-slate-400 space-y-3">
+                        <MessageCircle className="w-16 h-16 text-slate-200" />
+                        <h3 className="font-bold text-base text-slate-700">Selecciona una tutoría para ver los mensajes</h3>
+                        <p className="text-xs text-slate-400 max-w-sm">
+                          Aquí se mostrará el historial completo e inmutable de comunicación entre el tutor y el estudiante.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+                        {activeTab === 'profile' && currentUser.role !== 'admin' && (
               <div className="space-y-6 max-w-4xl mx-auto">
                 {/* CABECERA DEL PERFIL */}
                 <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center gap-6">
@@ -3568,9 +4322,11 @@ export default function App() {
                     <p className="text-sm text-slate-600">Dirección: <strong className="text-slate-900">{currentUser.address}</strong></p>
                   </div>
 
-                  <button onClick={handleToggleUserRole} className="px-4 py-3 rounded-xl border border-slate-300 text-sm font-bold text-slate-800 hover:bg-slate-50 transition shadow-sm">
-                    Cambiar a {currentUser.role === 'student' ? 'Tutor Docente' : 'Estudiante'}
-                  </button>
+                  {currentUser.role === 'student' && (
+                    <button onClick={handleToggleUserRole} className="px-4 py-3 rounded-xl border border-slate-300 text-sm font-bold text-slate-800 hover:bg-slate-50 transition shadow-sm">
+                      Cambiar a Tutor Docente
+                    </button>
+                  )}
                 </div>
 
                 {/* APARTADO: EDITAR / ACTUALIZAR DATOS PERSONALES */}
@@ -3890,9 +4646,20 @@ export default function App() {
                     return (
                       <div key={tutor.id} onClick={() => setViewingTutorProfile(tutor)} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between cursor-pointer transition hover:shadow-md group">
                         <div className="space-y-3">
-                          <h3 className="font-extrabold text-slate-900 text-base group-hover:opacity-80 transition">{tutor.name}</h3>
-                          <p className="text-sm font-bold" style={{ color: primaryColor }}>{tutor.career}</p>
-                          <p className="text-sm text-slate-600 line-clamp-2">{tutor.bio || 'Sin descripción.'}</p>
+                          <div className="flex items-center space-x-3">
+                            <div className="w-12 h-12 rounded-full overflow-hidden bg-slate-200 border-2 border-slate-300 flex items-center justify-center shrink-0 shadow-sm">
+                              {tutor.avatar ? (
+                                <img src={tutor.avatar} alt={tutor.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <span className="text-base font-black text-slate-600">{tutor.name?.charAt(0) || 'T'}</span>
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <h3 className="font-extrabold text-slate-900 text-base group-hover:opacity-80 transition truncate">{tutor.name}</h3>
+                              <p className="text-xs font-bold" style={{ color: primaryColor }}>{tutor.career}</p>
+                            </div>
+                          </div>
+                          <p className="text-xs text-slate-600 line-clamp-2">{tutor.bio || 'Docente tutor activo en el sistema institucional.'}</p>
                         </div>
                         <div className="border-t pt-4 mt-4 flex items-center justify-between">
                           <span className="text-sm font-bold text-slate-500 underline">Opiniones ({tutorReviews.length})</span>
@@ -3907,29 +4674,226 @@ export default function App() {
               </div>
             )}
 
-            {activeTab === 'sessions' && currentUser.role !== 'admin' && (
-              <div className="bg-white p-6 rounded-2xl border space-y-4">
-                <h2 className="text-xl font-bold">Tutorías Registradas</h2>
-                <div className="overflow-x-auto border rounded-xl">
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-50 text-xs uppercase font-bold border-b"><tr><th className="p-3.5">Materia</th><th className="p-3.5">Estudiante / Tutor</th><th className="p-3.5">Fecha</th><th className="p-3.5">Estado</th><th className="p-3.5 text-right">Acción</th></tr></thead>
-                    <tbody className="divide-y text-sm">
-                      {sessions.filter(s => currentUser.role === 'tutor' ? s.tutorId === currentUser.id : s.studentId === currentUser.id).map(s => (
-                        <tr key={s.id}>
-                          <td className="p-3.5 font-bold">{s.subject}</td>
-                          <td className="p-3.5 text-sm">{s.studentName} / {s.tutorName}</td>
-                          <td className="p-3.5 text-sm">{s.date}</td>
-                          <td className="p-3.5">{s.status}</td>
-                          <td className="p-3.5 text-right">
-                            <button onClick={() => setActiveChatSession(s)} className="px-3.5 py-2 bg-slate-100 text-slate-800 font-bold text-sm rounded-xl hover:bg-slate-200">Abrir Chat</button>
-                          </td>
-                        </tr>
+            {activeTab === 'sessions' && currentUser.role !== 'admin' && (() => {
+              const userSessions = sessions.filter(s => 
+                currentUser.role === 'tutor' ? s.tutorId === currentUser.id : s.studentId === currentUser.id
+              );
+
+              const filteredList = userSessions.filter(s => {
+                if (sessionsFilterStatus === 'all') return true;
+                if (sessionsFilterStatus === 'confirmed') return s.status === 'confirmed';
+                if (sessionsFilterStatus === 'pending') return s.status === 'pending';
+                if (sessionsFilterStatus === 'completed') return s.status === 'completed';
+                if (sessionsFilterStatus === 'rejected') return s.status === 'rejected';
+                return true;
+              });
+
+              return (
+                <div className="bg-white p-6 sm:p-8 rounded-3xl border shadow-sm space-y-6">
+                  {/* ENCABEZADO Y FILTROS HISTÓRICOS */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b gap-3">
+                    <div>
+                      <h2 className="text-xl sm:text-2xl font-black text-slate-800">
+                        {currentUser.role === 'tutor' ? 'Control Histórico de Tutorías' : 'Mis Tutorías Académicas'}
+                      </h2>
+                      <p className="text-xs text-slate-500 font-medium">
+                        {currentUser.role === 'tutor'
+                          ? 'Registro de tutorías aceptadas, en proceso, rechazadas y finalizadas con acceso al perfil de los estudiantes.'
+                          : 'Consulta el estado de tus solicitudes y accede a las tutorías confirmadas.'}
+                      </p>
+                    </div>
+
+                    {/* Filtros por estado */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {[
+                        { key: 'all', label: `Todas (${userSessions.length})` },
+                        { key: 'confirmed', label: 'En Proceso' },
+                        { key: 'pending', label: 'Pendientes' },
+                        { key: 'completed', label: 'Completadas' },
+                        { key: 'rejected', label: 'Rechazadas' }
+                      ].map(tab => (
+                        <button
+                          key={tab.key}
+                          onClick={() => setSessionsFilterStatus(tab.key)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                            sessionsFilterStatus === tab.key
+                              ? 'bg-slate-900 text-white shadow-xs'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
                       ))}
-                    </tbody>
-                  </table>
+                    </div>
+                  </div>
+
+                  {/* LISTADO DE TUTORÍAS */}
+                  {filteredList.length > 0 ? (
+                    <div className="space-y-4">
+                      {filteredList.map(session => {
+                        const partner = users.find(u => u.id === (currentUser.role === 'tutor' ? session.studentId : session.tutorId)) || {
+                          name: currentUser.role === 'tutor' ? (session.studentName || 'Estudiante') : (session.tutorName || 'Tutor'),
+                          career: currentUser.career,
+                          email: 'contacto@iujo.edu.ve',
+                          cedula: 'Sin cédula',
+                          phone: 'Sin teléfono',
+                          address: 'Caracas, Venezuela'
+                        };
+
+                        const isPending = session.status === 'pending';
+                        const isConfirmed = session.status === 'confirmed';
+                        const isCompleted = session.status === 'completed';
+                        const isRejected = session.status === 'rejected';
+
+                        const catalogMatch = catalogSubjects.find(cs => cs.name?.toLowerCase() === session.subject?.toLowerCase());
+                        const semesterNum = catalogMatch?.semester || 1;
+
+                        return (
+                          <div
+                            key={session.id}
+                            className="p-5 rounded-2xl border border-slate-200 bg-slate-50/70 hover:bg-slate-50 transition space-y-3.5 shadow-xs"
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2.5">
+                              <div className="space-y-1">
+                                <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                                  <h3 className="font-black text-base sm:text-lg text-slate-900">{session.subject}</h3>
+                                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200">
+                                    Semestre {semesterNum}
+                                  </span>
+                                  <span className="text-xs font-semibold px-2 py-0.5 rounded-lg bg-white border text-slate-600">
+                                    {session.modality || 'Presencial'}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-slate-500 flex items-center space-x-1.5">
+                                  <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                  <span>Ubicación: <strong className="text-slate-800">{session.location || 'Sede IUJO'}</strong></span>
+                                </p>
+                              </div>
+
+                              <span className={`self-start px-3 py-1 rounded-xl text-xs font-black uppercase tracking-wider shrink-0 ${
+                                isConfirmed ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
+                                isPending ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                                isCompleted ? 'bg-blue-100 text-blue-800 border border-blue-200' :
+                                'bg-red-100 text-red-800 border border-red-200'
+                              }`}>
+                                {isConfirmed ? 'En Proceso / Confirmada' :
+                                 isPending ? 'Solicitud Pendiente' :
+                                 isCompleted ? 'Tutoría Finalizada' : 'Rechazada'}
+                              </span>
+                            </div>
+
+                            {/* Ficha del interlocutor (Estudiante o Tutor) con Avatar visible */}
+                            <div className="p-3 bg-white rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                              <div className="flex items-center space-x-3">
+                                <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-200 border-2 border-slate-300 flex items-center justify-center shrink-0 shadow-xs">
+                                  {partner.avatar ? (
+                                    <img src={partner.avatar} alt={partner.name} className="w-full h-full object-cover" />
+                                  ) : (
+                                    <span className="text-sm font-black text-slate-600">{partner.name?.charAt(0) || 'U'}</span>
+                                  )}
+                                </div>
+                                <div>
+                                  <span className="text-[10px] font-bold uppercase text-slate-400 block">
+                                    {currentUser.role === 'tutor' ? 'Estudiante Solicitante' : 'Tutor Asignado'}
+                                  </span>
+                                  <span className="text-sm font-bold text-slate-900 block">{partner.name}</span>
+                                  <span className="text-xs text-slate-500">{partner.email}</span>
+                                </div>
+                              </div>
+
+                              {currentUser.role === 'tutor' && session.studentId && (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedStudentForInfo(partner)}
+                                  className="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs flex items-center space-x-1.5 self-start sm:self-auto transition"
+                                >
+                                  <Info className="w-3.5 h-3.5" />
+                                  <span>Ver Información del Estudiante</span>
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Mensaje descriptivo */}
+                            {session.description && (
+                              <p className="text-xs text-slate-600 bg-slate-100/60 p-3 rounded-xl border italic">
+                                "{session.description}"
+                              </p>
+                            )}
+
+                            {/* Barra inferior: Fecha y Botones de Acción */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-2 border-t gap-2.5 text-xs">
+                              <div className="flex items-center space-x-3 text-slate-600">
+                                <span className="flex items-center space-x-1"><Calendar className="w-3.5 h-3.5 text-slate-400" /> <strong>{session.date || 'Por acordar'}</strong></span>
+                                <span className="flex items-center space-x-1"><Clock className="w-3.5 h-3.5 text-slate-400" /> <strong>{session.time || 'Coordinable'}</strong></span>
+                              </div>
+
+                              <div className="flex items-center space-x-2">
+                                {isPending && currentUser.role === 'tutor' && (
+                                  <>
+                                    <button
+                                      onClick={() => handleAcceptSessionRequest(session)}
+                                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition text-xs shadow-xs"
+                                    >
+                                      Aceptar Tutoría
+                                    </button>
+                                    <button
+                                      onClick={() => handleRejectSessionRequest(session)}
+                                      className="px-3.5 py-2 bg-red-100 hover:bg-red-200 text-red-700 font-bold rounded-xl transition text-xs"
+                                    >
+                                      Rechazar
+                                    </button>
+                                  </>
+                                )}
+
+                                {(isConfirmed || isCompleted) && (
+                                  <button
+                                    onClick={() => {
+                                      setActiveChatSession(session);
+                                      setActiveTab('messages');
+                                    }}
+                                    className="px-3.5 py-2 rounded-xl text-white font-bold text-xs transition flex items-center space-x-1.5 shadow-xs"
+                                    style={{ backgroundColor: primaryColor }}
+                                  >
+                                    <MessageCircle className="w-4 h-4" />
+                                    <span>Ir al Chat Inmutable</span>
+                                  </button>
+                                )}
+
+                                {isConfirmed && currentUser.role === 'tutor' && (
+                                  <button
+                                    onClick={() => handleMarkSessionCompleted(session)}
+                                    className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold rounded-xl transition text-xs border border-emerald-200"
+                                  >
+                                    Marcar Completada
+                                  </button>
+                                )}
+
+                                {isConfirmed && currentUser.role === 'student' && (
+                                  <button
+                                    onClick={() => setSessionToRate(session)}
+                                    className="px-3.5 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold rounded-xl transition text-xs border border-purple-200"
+                                  >
+                                    Calificar Tutor
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-12 border-2 border-dashed border-slate-200 rounded-3xl bg-slate-50/50 space-y-2.5">
+                      <Calendar className="w-10 h-10 text-slate-300 mx-auto" />
+                      <p className="text-base font-bold text-slate-700">No se encontraron tutorías con el criterio seleccionado</p>
+                      <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                        Los registros históricos de solicitudes, sesiones confirmadas y finalizadas se archivarán automáticamente en esta sección.
+                      </p>
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
         ) : (
           <div className="max-w-xl mx-auto my-6">
@@ -4578,6 +5542,80 @@ export default function App() {
                 <span>{deletingCareerSubmitting ? 'Eliminando...' : 'Eliminar Carrera'}</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+    
+      {/* MODAL FICHA DETALLADA DEL ESTUDIANTE */}
+      {selectedStudentForInfo && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center space-x-2.5">
+                <div className="p-2 rounded-xl bg-blue-50 text-blue-600">
+                  <User className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-lg text-slate-900">Ficha del Estudiante</h3>
+                  <p className="text-xs text-slate-500">Información académica y de contacto</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedStudentForInfo(null)}
+                className="p-1 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-700"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="text-center space-y-2">
+              <div className="w-20 h-20 rounded-full overflow-hidden bg-slate-200 border-4 border-slate-100 shadow-md mx-auto flex items-center justify-center">
+                {selectedStudentForInfo.avatar ? (
+                  <img src={selectedStudentForInfo.avatar} alt={selectedStudentForInfo.name} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-2xl font-black text-slate-600">{selectedStudentForInfo.name?.charAt(0) || 'E'}</span>
+                )}
+              </div>
+              <div>
+                <h4 className="font-black text-lg text-slate-900">{selectedStudentForInfo.name}</h4>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
+                  Estudiante Regular IUJO
+                </span>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2.5 text-xs text-slate-700">
+              <div className="flex justify-between border-b border-slate-200/60 pb-1.5">
+                <span className="font-bold text-slate-500">Cédula de Identidad:</span>
+                <span className="font-black text-slate-900">{selectedStudentForInfo.cedula || 'V-No especificada'}</span>
+              </div>
+              <div className="flex justify-between border-b border-slate-200/60 pb-1.5">
+                <span className="font-bold text-slate-500">Carrera Académica:</span>
+                <span className="font-black text-slate-900">{selectedStudentForInfo.career || 'Informática'}</span>
+              </div>
+              <div className="flex justify-between border-b border-slate-200/60 pb-1.5">
+                <span className="font-bold text-slate-500">Correo Electrónico:</span>
+                <span className="font-bold text-slate-800">{selectedStudentForInfo.email}</span>
+              </div>
+              <div className="flex justify-between border-b border-slate-200/60 pb-1.5">
+                <span className="font-bold text-slate-500">Teléfono:</span>
+                <span className="font-bold text-slate-800">{selectedStudentForInfo.phone || 'No registrado'}</span>
+              </div>
+              <div className="flex justify-between pt-0.5">
+                <span className="font-bold text-slate-500">Dirección:</span>
+                <span className="font-medium text-slate-800 text-right">{selectedStudentForInfo.address || 'Caracas, Venezuela'}</span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setSelectedStudentForInfo(null)}
+              className="w-full bg-slate-100 hover:bg-slate-200 font-bold py-3 rounded-xl text-sm text-slate-800 transition"
+            >
+              Cerrar Ficha
+            </button>
           </div>
         </div>
       )}
