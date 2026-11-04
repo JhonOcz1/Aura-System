@@ -6,7 +6,7 @@ import {
   Search, Calendar, Download, Filter, Star, PieChart, Camera,
   Palette, Clock, Trash2, ShieldAlert, MessageCircle, CheckCircle,
   XCircle, KeyRound, UserPlus, Bell, X, Mail, Lock, ChevronDown, ChevronRight, Save, Edit3, FileText,
-  TrendingUp, CheckCircle2, Clock3, Upload, UserCheck, UserX, AlertTriangle, Layers, Plus, FileSpreadsheet, Video, MapPin, ExternalLink, Info, Send, RefreshCw
+  TrendingUp, CheckCircle2, Clock3, Upload, UserCheck, UserX, AlertTriangle, Layers, Plus, FileSpreadsheet, Video, MapPin, ExternalLink, Info, Send, RefreshCw, ArrowLeft
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -514,12 +514,54 @@ const mapNotifToDB = (n) => ({
 });
 
 export default function App() {
-  const [users, setUsers] = useState(INITIAL_USERS);
-  const [sessions, setSessions] = useState(INITIAL_SESSIONS);
-  const [careers, setCareers] = useState(INITIAL_CAREERS);
-  const [reviews, setReviews] = useState(INITIAL_REVIEWS);
-  const [audits, setAudits] = useState(INITIAL_AUDITS);
-  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
+  const [users, setUsers] = useState(() => {
+    try {
+      const saved = localStorage.getItem('aura_cached_users');
+      return saved ? JSON.parse(saved) : INITIAL_USERS;
+    } catch (e) {
+      return INITIAL_USERS;
+    }
+  });
+  const [sessions, setSessions] = useState(() => {
+    try {
+      const saved = localStorage.getItem('aura_cached_sessions');
+      return saved ? JSON.parse(saved) : INITIAL_SESSIONS;
+    } catch (e) {
+      return INITIAL_SESSIONS;
+    }
+  });
+  const [careers, setCareers] = useState(() => {
+    try {
+      const saved = localStorage.getItem('aura_cached_careers');
+      return saved ? JSON.parse(saved) : INITIAL_CAREERS;
+    } catch (e) {
+      return INITIAL_CAREERS;
+    }
+  });
+  const [reviews, setReviews] = useState(() => {
+    try {
+      const saved = localStorage.getItem('aura_cached_reviews');
+      return saved ? JSON.parse(saved) : INITIAL_REVIEWS;
+    } catch (e) {
+      return INITIAL_REVIEWS;
+    }
+  });
+  const [audits, setAudits] = useState(() => {
+    try {
+      const saved = localStorage.getItem('aura_cached_audits');
+      return saved ? JSON.parse(saved) : INITIAL_AUDITS;
+    } catch (e) {
+      return INITIAL_AUDITS;
+    }
+  });
+  const [notifications, setNotifications] = useState(() => {
+    try {
+      const saved = localStorage.getItem('aura_cached_notifications');
+      return saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS;
+    } catch (e) {
+      return INITIAL_NOTIFICATIONS;
+    }
+  });
   const [currentUser, setCurrentUser] = useState(() => {
     try {
       const saved = localStorage.getItem('aura_active_user');
@@ -696,87 +738,131 @@ export default function App() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // Cargar datos desde Supabase
+  // Cargar datos desde Supabase con caché y optimización de velocidad
   const loadDataFromSupabase = async (isInitial = false) => {
     try {
-      const [
-        { data: usersData },
-        { data: sessionsData },
-        { data: careersData },
-        { data: reviewsData },
-        { data: auditsData },
-        { data: notifsData }
-      ] = await Promise.all([
-        supabase.from('users').select('*'),
-        supabase.from('sessions').select('*'),
-        supabase.from('careers').select('*'),
-        supabase.from('reviews').select('*'),
-        supabase.from('audits').select('*').order('id', { ascending: false }),
-        supabase.from('notifications').select('*').order('created_at', { ascending: false })
-      ]);
+      if (isInitial) {
+        // Carga completa inicial optimizada con límites
+        const [
+          { data: usersData },
+          { data: sessionsData },
+          { data: careersData },
+          { data: reviewsData },
+          { data: auditsData },
+          { data: notifsData }
+        ] = await Promise.all([
+          supabase.from('users').select('*'),
+          supabase.from('sessions').select('*'),
+          supabase.from('careers').select('*'),
+          supabase.from('reviews').select('*'),
+          supabase.from('audits').select('*').order('id', { ascending: false }).limit(60),
+          supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(50)
+        ]);
 
-      if (usersData && usersData.length > 0) {
-        const mappedUsers = usersData.map(mapUserFromDB);
-        setUsers(mappedUsers);
+        if (usersData && usersData.length > 0) {
+          const mappedUsers = usersData.map(mapUserFromDB);
+          setUsers(mappedUsers);
+          try { localStorage.setItem('aura_cached_users', JSON.stringify(mappedUsers)); } catch (e) {}
 
-        const savedActive = localStorage.getItem('aura_active_user');
-        if (savedActive) {
-          try {
-            const activeObj = JSON.parse(savedActive);
-            const fresh = mappedUsers.find(u => u.id === activeObj.id);
-            if (fresh) {
-              if (fresh.status !== 'active') {
+          const savedActive = localStorage.getItem('aura_active_user');
+          if (savedActive) {
+            try {
+              const activeObj = JSON.parse(savedActive);
+              const fresh = mappedUsers.find(u => u.id === activeObj.id);
+              if (fresh) {
+                if (fresh.status !== 'active') {
+                  setCurrentUser(null);
+                  localStorage.removeItem('aura_active_user');
+                } else {
+                  setCurrentUser(fresh);
+                  localStorage.setItem('aura_active_user', JSON.stringify(fresh));
+                }
+              } else {
                 setCurrentUser(null);
                 localStorage.removeItem('aura_active_user');
-              } else if (isInitial) {
-                setCurrentUser(fresh);
-                localStorage.setItem('aura_active_user', JSON.stringify(fresh));
               }
-            } else if (isInitial) {
-              // Usuario antiguo en localStorage que ya no existe en la BD
-              setCurrentUser(null);
-              localStorage.removeItem('aura_active_user');
-            }
-          } catch (e) { }
+            } catch (e) { }
+          }
         }
-      }
-      if (sessionsData) {
-        const mappedSessions = sessionsData.map(mapSessionFromDB);
-        setSessions(mappedSessions);
-        setActiveChatSession(prev => {
-          if (!prev) return null;
-          const fresh = mappedSessions.find(s => s.id === prev.id);
-          return fresh || prev;
-        });
-      }
-      if (careersData && careersData.length > 0) setCareers(careersData);
-      try {
-        const { data: subDB } = await supabase.from('subjects').select('*');
-        if (subDB && subDB.length > 0) {
-          const mappedSubs = subDB.map(s => ({
-            id: s.id,
-            career: s.career,
-            semester: s.semester || 1,
-            name: s.name,
-            tutorIds: Array.isArray(s.tutor_ids) ? s.tutor_ids : []
-          }));
-          setCatalogSubjects(mappedSubs);
-          try { localStorage.setItem('aura_catalog_subjects', JSON.stringify(mappedSubs)); } catch (e) {}
-        }
-      } catch (e) {}
 
-      if (reviewsData) setReviews(reviewsData);
-      if (auditsData) setAudits(auditsData.map(mapAuditFromDB).sort((a, b) => (b.id || '').localeCompare(a.id || '')));
-      if (notifsData) setNotifications(notifsData.map(mapNotifFromDB));
+        if (sessionsData) {
+          const mappedSessions = sessionsData.map(mapSessionFromDB);
+          setSessions(mappedSessions);
+          try { localStorage.setItem('aura_cached_sessions', JSON.stringify(mappedSessions)); } catch (e) {}
+          setActiveChatSession(prev => {
+            if (!prev) return null;
+            const fresh = mappedSessions.find(s => s.id === prev.id);
+            return fresh || prev;
+          });
+        }
+
+        if (careersData && careersData.length > 0) {
+          setCareers(careersData);
+          try { localStorage.setItem('aura_cached_careers', JSON.stringify(careersData)); } catch (e) {}
+        }
+
+        try {
+          const { data: subDB } = await supabase.from('subjects').select('*');
+          if (subDB && subDB.length > 0) {
+            const mappedSubs = subDB.map(s => ({
+              id: s.id,
+              career: s.career,
+              semester: s.semester || 1,
+              name: s.name,
+              tutorIds: Array.isArray(s.tutor_ids) ? s.tutor_ids : []
+            }));
+            setCatalogSubjects(mappedSubs);
+            try { localStorage.setItem('aura_catalog_subjects', JSON.stringify(mappedSubs)); } catch (e) {}
+          }
+        } catch (e) {}
+
+        if (reviewsData) {
+          setReviews(reviewsData);
+          try { localStorage.setItem('aura_cached_reviews', JSON.stringify(reviewsData)); } catch (e) {}
+        }
+        if (auditsData) {
+          const mappedAudits = auditsData.map(mapAuditFromDB).sort((a, b) => (b.id || '').localeCompare(a.id || ''));
+          setAudits(mappedAudits);
+          try { localStorage.setItem('aura_cached_audits', JSON.stringify(mappedAudits)); } catch (e) {}
+        }
+        if (notifsData) {
+          const mappedNotifs = notifsData.map(mapNotifFromDB);
+          setNotifications(mappedNotifs);
+          try { localStorage.setItem('aura_cached_notifications', JSON.stringify(mappedNotifs)); } catch (e) {}
+        }
+      } else {
+        // Carga de sincronización en segundo plano ultrarrápida: solo tablas dinámicas
+        const [
+          { data: sessionsData },
+          { data: notifsData }
+        ] = await Promise.all([
+          supabase.from('sessions').select('*'),
+          supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(30)
+        ]);
+
+        if (sessionsData) {
+          const mappedSessions = sessionsData.map(mapSessionFromDB);
+          setSessions(mappedSessions);
+          try { localStorage.setItem('aura_cached_sessions', JSON.stringify(mappedSessions)); } catch (e) {}
+          setActiveChatSession(prev => {
+            if (!prev) return null;
+            const fresh = mappedSessions.find(s => s.id === prev.id);
+            return fresh || prev;
+          });
+        }
+
+        if (notifsData) {
+          const mappedNotifs = notifsData.map(mapNotifFromDB);
+          setNotifications(mappedNotifs);
+          try { localStorage.setItem('aura_cached_notifications', JSON.stringify(mappedNotifs)); } catch (e) {}
+        }
+      }
     } catch (e) {
       console.error('Error al sincronizar con Supabase:', e);
     }
   };
 
   useEffect(() => {
-    // Limpiar claves antiguas de localStorage para usar exclusivamente Supabase
-    ['aura_users', 'aura_sessions', 'aura_careers', 'aura_reviews', 'aura_audits', 'aura_notifications'].forEach(k => localStorage.removeItem(k));
-
     loadDataFromSupabase(true);
 
     // Refrescar al volver a enfocar la ventana o pestaña (por ejemplo al cambiar entre PC y celular)
@@ -1544,6 +1630,11 @@ export default function App() {
       return;
     }
 
+    if (targetSession.status === 'completed') {
+      showToast('Esta tutoría ha finalizado. El chat está archivado y no se pueden enviar más mensajes.', 'warning');
+      return;
+    }
+
     const msgId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
     const msgTime = getVenezuelaTimeString();
     const newMsgObj = {
@@ -1862,14 +1953,34 @@ export default function App() {
       return;
     }
 
-    const updated = { ...sessionObj, status: 'completed' };
+    const currentChat = (sessionObj.chat || []).filter(m => !m || !m.__meta);
+    const endChatMsg = {
+      id: `msg_sys_${Date.now()}`,
+      sender: 'Sistema',
+      senderRole: 'system',
+      text: `La tutoría ha sido completada con éxito por el docente tutor ${currentUser.name}. El canal de comunicación ha finalizado y el chat permanece archivado de forma inmutable para consulta histórica.`,
+      time: getVenezuelaTimeString()
+    };
+    const updatedChat = [...currentChat, endChatMsg];
+
+    const updated = { ...sessionObj, status: 'completed', chat: updatedChat };
     setSessions(prev => prev.map(s => s.id === sessionObj.id ? updated : s));
     if (activeChatSession && activeChatSession.id === sessionObj.id) {
       setActiveChatSession(updated);
     }
 
     try {
-      const { error } = await supabase.from('sessions').update({ status: 'completed' }).eq('id', sessionObj.id);
+      const metaObj = {
+        __meta: true,
+        modality: sessionObj.modality || 'Presencial',
+        location: sessionObj.location || 'Sede IUJO',
+        description: sessionObj.description || ''
+      };
+      const { error } = await supabase.from('sessions').update({
+        status: 'completed',
+        chat: [metaObj, ...updatedChat]
+      }).eq('id', sessionObj.id);
+
       if (error) {
         showToast('Error al actualizar el estado en base de datos: ' + error.message, 'danger');
         return;
@@ -1886,9 +1997,9 @@ export default function App() {
       await logAudit(
         currentUser.name,
         'TUTORÍA COMPLETADA',
-        `Se finalizó la tutoría de ${sessionObj.subject} con ${sessionObj.studentName}`
+        `Se finalizó la tutoría de ${sessionObj.subject} con ${sessionObj.studentName}. Canal de chat cerrado y archivado.`
       );
-      showToast('Tutoría completada con éxito.');
+      showToast('Tutoría completada con éxito. Canal de chat finalizado.');
     } catch (err) {
       console.error(err);
     }
@@ -2863,10 +2974,10 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
         {currentUser ? (
           <div>
-            <div className="bg-white rounded-2xl p-3 mb-6 border border-slate-200 shadow-sm flex flex-wrap gap-3 items-center justify-between">
-              <div className="flex flex-wrap gap-3 items-center">
-              <button onClick={() => setActiveTab('dashboard')} className={`px-5 py-2.5 rounded-xl text-sm font-bold transition flex items-center space-x-2.5 shrink-0 ${activeTab === 'dashboard' ? 'text-white shadow-md' : 'text-slate-700 hover:bg-slate-100'}`} style={activeTab === 'dashboard' ? { backgroundColor: primaryColor } : {}}>
-                <Activity className="w-4.5 h-4.5 shrink-0" /> <span className="whitespace-nowrap">Panel Principal</span>
+            <div className="bg-white rounded-2xl p-2.5 sm:p-3 mb-6 border border-slate-200 shadow-sm flex flex-col md:flex-row gap-2.5 items-stretch md:items-center justify-between">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1.5 max-w-full scrollbar-none">
+              <button onClick={() => setActiveTab('dashboard')} className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition flex items-center space-x-2 shrink-0 ${activeTab === 'dashboard' ? 'text-white shadow-md' : 'text-slate-700 hover:bg-slate-100'}`} style={activeTab === 'dashboard' ? { backgroundColor: primaryColor } : {}}>
+                <Activity className="w-4 h-4 sm:w-4.5 sm:h-4.5 shrink-0" /> <span className="whitespace-nowrap">Panel Principal</span>
               </button>
 
               {currentUser.role === 'admin' && (
@@ -2929,11 +3040,13 @@ export default function App() {
               </div>
 
               {/* ROL EN LA BARRA DE NAVEGACIÓN PRINCIPAL */}
-              <div className="ml-auto flex items-center space-x-2 px-3.5 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700 shadow-2xs">
-                <span className="text-[10px] uppercase font-extrabold text-slate-400">Rol:</span>
-                <span className="font-black text-slate-900 uppercase">
-                  {currentUser.role === 'admin' ? 'Super Administrador' : currentUser.role === 'tutor' ? 'Tutor' : 'Estudiante'}
-                </span>
+              <div className="flex items-center justify-between md:justify-end shrink-0 pt-1 md:pt-0 border-t md:border-t-0 border-slate-100">
+                <div className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700 shadow-2xs">
+                  <span className="text-[10px] uppercase font-extrabold text-slate-400">Rol:</span>
+                  <span className="font-black text-slate-900 uppercase">
+                    {currentUser.role === 'admin' ? 'Super Administrador' : currentUser.role === 'tutor' ? 'Tutor' : 'Estudiante'}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -4702,9 +4815,9 @@ export default function App() {
               const cleanMessages = currentConversation ? (currentConversation.chat || []).filter(m => !m || !m.__meta) : [];
 
               return (
-                <div className="bg-white rounded-3xl border shadow-sm overflow-hidden flex flex-col md:flex-row h-[750px]">
+                <div className="bg-white rounded-3xl border shadow-sm overflow-hidden flex flex-col md:flex-row h-[calc(100vh-190px)] min-h-[520px] md:h-[750px]">
                   {/* BARRA LATERAL: LISTADO DE CONVERSACIONES */}
-                  <div className="w-full md:w-80 border-r border-slate-200 flex flex-col bg-slate-50/50">
+                  <div className={`w-full md:w-80 border-r border-slate-200 flex flex-col bg-slate-50/50 ${activeChatSession ? 'hidden md:flex' : 'flex'}`}>
                     <div className="p-4 border-b border-slate-200 space-y-2.5 bg-white">
                       <div className="flex items-center justify-between">
                         <h2 className="text-lg font-black text-slate-800">Mensajes</h2>
@@ -4793,13 +4906,21 @@ export default function App() {
                   </div>
 
                   {/* PANEL PRINCIPAL DEL CHAT INMUTABLE */}
-                  <div className="flex-1 flex flex-col bg-white">
+                  <div className={`flex-1 flex flex-col bg-white ${activeChatSession ? 'flex' : 'hidden md:flex'}`}>
                     {currentConversation && partnerUser ? (
                       <>
                         {/* Cabecera del chat */}
-                        <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/60">
-                          <div className="flex items-center space-x-3 min-w-0">
-                            <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-200 border-2 border-slate-300 flex items-center justify-center shrink-0 shadow-xs">
+                        <div className="p-3 sm:p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/60">
+                          <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
+                            <button
+                              type="button"
+                              onClick={() => setActiveChatSession(null)}
+                              className="md:hidden p-1.5 -ml-1 text-slate-600 hover:text-slate-900 rounded-xl hover:bg-slate-200 transition shrink-0"
+                              title="Volver a los chats"
+                            >
+                              <ArrowLeft className="w-5 h-5" />
+                            </button>
+                            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full overflow-hidden bg-slate-200 border-2 border-slate-300 flex items-center justify-center shrink-0 shadow-xs">
                               {partnerUser.avatar ? (
                                 <img src={partnerUser.avatar} alt={partnerUser.name} className="w-full h-full object-cover" />
                               ) : (
@@ -4906,24 +5027,33 @@ export default function App() {
                           <div ref={chatEndRef} />
                         </div>
 
-                        {/* Barra de entrada de texto */}
-                        <form onSubmit={handleSendChatMessage} className="p-3.5 border-t border-slate-200 flex items-center space-x-2 bg-white">
-                          <input
-                            type="text"
-                            placeholder="Escribe un mensaje seguro e inmutable..."
-                            value={chatMessageText}
-                            onChange={e => setChatMessageText(e.target.value)}
-                            className="flex-1 p-3 border rounded-xl text-xs sm:text-sm font-medium outline-none focus:border-blue-500 transition"
-                          />
-                          <button
-                            type="submit"
-                            disabled={!chatMessageText.trim()}
-                            className="p-3 rounded-xl text-white font-bold transition shadow-sm hover:opacity-90 disabled:opacity-40 flex items-center justify-center"
-                            style={{ backgroundColor: primaryColor }}
-                          >
-                            <Send className="w-4 h-4" />
-                          </button>
-                        </form>
+                        {/* Barra de entrada de texto o aviso de tutoría finalizada */}
+                        {currentConversation.status === 'completed' ? (
+                          <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-center gap-2 text-center text-slate-500 font-medium">
+                            <Lock className="w-4 h-4 text-slate-400 shrink-0" />
+                            <span className="text-xs sm:text-sm">
+                              Esta tutoría ha finalizado. El registro del chat permanece archivado e inmutable para consulta histórica, pero los mensajes nuevos han sido deshabilitados.
+                            </span>
+                          </div>
+                        ) : (
+                          <form onSubmit={handleSendChatMessage} className="p-3.5 border-t border-slate-200 flex items-center space-x-2 bg-white">
+                            <input
+                              type="text"
+                              placeholder="Escribe un mensaje seguro e inmutable..."
+                              value={chatMessageText}
+                              onChange={e => setChatMessageText(e.target.value)}
+                              className="flex-1 p-3 border rounded-xl text-xs sm:text-sm font-medium outline-none focus:border-blue-500 transition"
+                            />
+                            <button
+                              type="submit"
+                              disabled={!chatMessageText.trim()}
+                              className="p-3 rounded-xl text-white font-bold transition shadow-sm hover:opacity-90 disabled:opacity-40 flex items-center justify-center"
+                              style={{ backgroundColor: primaryColor }}
+                            >
+                              <Send className="w-4 h-4" />
+                            </button>
+                          </form>
+                        )}
                       </>
                     ) : (
                       <div className="h-full flex flex-col items-center justify-center p-8 text-center text-slate-400 space-y-3">
