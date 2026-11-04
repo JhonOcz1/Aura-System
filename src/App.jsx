@@ -6,7 +6,7 @@ import {
   Search, Calendar, Download, Filter, Star, PieChart, Camera,
   Palette, Clock, Trash2, ShieldAlert, MessageCircle, CheckCircle,
   XCircle, KeyRound, UserPlus, Bell, X, Mail, Lock, ChevronDown, ChevronRight, Save, Edit3, FileText,
-  TrendingUp, CheckCircle2, Clock3, Upload, UserCheck, UserX, AlertTriangle, Layers, Plus, FileSpreadsheet, Video, MapPin, ExternalLink, Info, Send
+  TrendingUp, CheckCircle2, Clock3, Upload, UserCheck, UserX, AlertTriangle, Layers, Plus, FileSpreadsheet, Video, MapPin, ExternalLink, Info, Send, RefreshCw
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -608,6 +608,8 @@ export default function App() {
 
   const [activeChatSession, setActiveChatSession] = useState(null);
   const [chatMessageText, setChatMessageText] = useState('');
+  const [isRefreshingMessages, setIsRefreshingMessages] = useState(false);
+  const chatEndRef = useRef(null);
 
   const [sessionToRate, setSessionToRate] = useState(null);
   const [ratingStars, setRatingStars] = useState(5);
@@ -738,7 +740,15 @@ export default function App() {
           } catch (e) { }
         }
       }
-      if (sessionsData) setSessions(sessionsData.map(mapSessionFromDB));
+      if (sessionsData) {
+        const mappedSessions = sessionsData.map(mapSessionFromDB);
+        setSessions(mappedSessions);
+        setActiveChatSession(prev => {
+          if (!prev) return null;
+          const fresh = mappedSessions.find(s => s.id === prev.id);
+          return fresh || prev;
+        });
+      }
       if (careersData && careersData.length > 0) setCareers(careersData);
       try {
         const { data: subDB } = await supabase.from('subjects').select('*');
@@ -785,6 +795,39 @@ export default function App() {
       clearInterval(interval);
     };
   }, []);
+
+  // Auto-scroll al final del chat cuando hay nuevos mensajes o cambia la conversación
+  useEffect(() => {
+    if (activeTab === 'messages' && chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [sessions, activeChatSession, activeTab]);
+
+  // Función para sincronizar manualmente los mensajes y notificaciones desde Supabase
+  const handleRefreshMessages = async () => {
+    setIsRefreshingMessages(true);
+    try {
+      const { data: dbSessions, error } = await supabase.from('sessions').select('*');
+      if (!error && dbSessions) {
+        const mappedSessions = dbSessions.map(mapSessionFromDB);
+        setSessions(mappedSessions);
+        if (activeChatSession) {
+          const fresh = mappedSessions.find(s => s.id === activeChatSession.id);
+          if (fresh) setActiveChatSession(fresh);
+        }
+      }
+      const { data: dbNotifs } = await supabase.from('notifications').select('*').order('created_at', { ascending: false });
+      if (dbNotifs) {
+        setNotifications(dbNotifs.map(mapNotifFromDB));
+      }
+      showToast('Mensajes sincronizados correctamente', 'info');
+    } catch (err) {
+      console.error('Error al sincronizar mensajes:', err);
+      showToast('Error de conexión al sincronizar mensajes', 'danger');
+    } finally {
+      setIsRefreshingMessages(false);
+    }
+  };
 
   // Función dedicada para actualizar datos del usuario en la base de datos
   const updateUserInDB = async (updatedUser, successMsg = 'Cambios sincronizados con la base de datos') => {
@@ -1486,46 +1529,92 @@ export default function App() {
 
   const handleSendChatMessage = async (e) => {
     e.preventDefault();
-    if (!chatMessageText.trim()) return;
+    const textToSend = chatMessageText.trim();
+    if (!textToSend) return;
 
-    const currentSession = sessions.find(s => s.id === activeChatSession.id);
-    const newChat = [...(currentSession?.chat || []), { sender: currentUser.name, text: chatMessageText, time: 'Ahora' }];
+    // Obtener la sesión activa de la conversación
+    const targetSession = sessions.find(s => activeChatSession && s.id === activeChatSession.id) ||
+      sessions.find(s =>
+        (currentUser.role === 'tutor' ? s.tutorId === currentUser.id : s.studentId === currentUser.id) &&
+        (s.status === 'confirmed' || s.status === 'completed')
+      );
 
-    const updatedSessions = sessions.map(s => {
-      if (s.id === activeChatSession.id) {
-        return { ...s, chat: newChat };
-      }
-      return s;
-    });
+    if (!targetSession) {
+      showToast('No se encontró una conversación activa para enviar el mensaje.', 'danger');
+      return;
+    }
 
-    setSessions(updatedSessions);
-    setActiveChatSession({ ...activeChatSession, chat: newChat });
+    const msgId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+    const msgTime = getVenezuelaTimeString();
+    const newMsgObj = {
+      id: msgId,
+      sender: currentUser.name,
+      senderRole: currentUser.role,
+      text: textToSend,
+      time: msgTime
+    };
+
+    // Chat limpio sin metadatos
+    const cleanChat = (targetSession.chat || []).filter(m => !m || !m.__meta);
+    const updatedCleanChat = [...cleanChat, newMsgObj];
+
+    // Preservar metadatos en sessions para la base de datos
+    const currentMeta = {
+      __meta: true,
+      modality: targetSession.modality || 'Presencial',
+      location: targetSession.location || (targetSession.modality === 'Virtual / Online' ? 'Google Meet / Enlace en Chat' : 'Sede IUJO'),
+      description: targetSession.description || ''
+    };
+    const fullChatForDB = [currentMeta, ...updatedCleanChat];
+
+    // Actualización optimista de estado local
+    const updatedSessionObj = { ...targetSession, chat: updatedCleanChat };
+    setSessions(prev => prev.map(s => s.id === targetSession.id ? updatedSessionObj : s));
+    setActiveChatSession(updatedSessionObj);
     setChatMessageText('');
 
     try {
-      const currentMeta = (currentSession.chat || []).find(m => m && m.__meta) || {
-        __meta: true,
-        modality: currentSession.modality || 'Presencial',
-        location: currentSession.location || 'Sede IUJO',
-        description: currentSession.description || ''
-      };
-      const { error } = await supabase.from('sessions').update({ chat: [currentMeta, ...updatedCleanChat] }).eq('id', activeChatSession.id);
-      if (error) console.error('Error guardando mensaje en sessions:', error);
+      // 1. Guardar en tabla sessions de Supabase
+      const { error } = await supabase
+        .from('sessions')
+        .update({ chat: fullChatForDB })
+        .eq('id', targetSession.id);
 
-      // Guardar también en tabla messages dedicada si existe
+      if (error) {
+        console.error('Error guardando mensaje en sessions:', error);
+      }
+
+      // 2. Guardar también en tabla messages dedicada si existe en Supabase
       try {
         await supabase.from('messages').insert([{
-          id: newMsg.id,
-          session_id: activeChatSession.id,
+          id: msgId,
+          session_id: targetSession.id,
           sender_id: currentUser.id,
           sender_name: currentUser.name,
           sender_role: currentUser.role,
-          text: newMsg.text,
+          text: textToSend,
           created_at: new Date().toISOString()
         }]);
-      } catch (eMsg) {}
+      } catch (eMsg) {
+        // Silencioso si la tabla messages aún no está creada
+      }
+
+      // 3. Enviar notificación instantánea a la otra parte (alumno o tutor)
+      const recipientId = currentUser.role === 'tutor' ? targetSession.studentId : targetSession.tutorId;
+      if (recipientId) {
+        const preview = textToSend.length > 50 ? `${textToSend.slice(0, 47)}...` : textToSend;
+        const roleLabel = currentUser.role === 'tutor' ? 'tutor' : 'alumno';
+        await addNotification(
+          recipientId,
+          `Nuevo mensaje del ${roleLabel} ${currentUser.name}`,
+          `"${preview}" en tutoría de ${targetSession.subject}`,
+          targetSession.id,
+          'chat_message'
+        );
+      }
     } catch (err) {
-      console.error('Error guardando mensaje de chat:', err);
+      console.error('Error enviando mensaje:', err);
+      showToast('Error al enviar el mensaje', 'danger');
     }
   };
 
@@ -1861,6 +1950,34 @@ export default function App() {
       return;
     }
 
+    // Redirección directa al chat en el módulo de Mensajes cuando llega un mensaje o tutoría aceptada
+    const isChatMessage = notif.type === 'chat_message' || 
+      (notif.title && notif.title.toLowerCase().includes('mensaje')) ||
+      (notif.text && notif.text.toLowerCase().includes('módulo de mensajes'));
+
+    const isAcceptedSession = notif.type === 'session_accepted' ||
+      (notif.title && (notif.title.includes('Aceptada') || notif.title.includes('Confirmada')));
+
+    if (isChatMessage || isAcceptedSession) {
+      setActiveTab('messages');
+      if (notif.sessionId) {
+        const found = sessions.find(s => s.id === notif.sessionId);
+        if (found) {
+          setActiveChatSession(found);
+        }
+        // Refrescar sesión directamente de Supabase para tener mensajes frescos al instante
+        try {
+          const { data: dbSes } = await supabase.from('sessions').select('*').eq('id', notif.sessionId).maybeSingle();
+          if (dbSes) {
+            const mapped = mapSessionFromDB(dbSes);
+            setActiveChatSession(mapped);
+            setSessions(prev => prev.map(s => s.id === mapped.id ? mapped : s));
+          }
+        } catch (e) {}
+      }
+      return;
+    }
+
     if (notif.sessionId) {
       const targetSession = sessions.find(s => s.id === notif.sessionId);
 
@@ -1926,7 +2043,7 @@ export default function App() {
         'Tutoría Aceptada y Confirmada',
         `Tu tutor ${currentUser.name} ha aceptado tu tutoría de ${sessionObj.subject}. Ya puedes comunicarte a través del módulo de Mensajes.`,
         sessionObj.id,
-        'general'
+        'session_accepted'
       );
       await logAudit(currentUser.name, 'TUTORÍA ACEPTADA', `Aceptó la solicitud de ${sessionObj.studentName} para la materia ${sessionObj.subject}`);
       showToast('¡Tutoría aceptada! Canal de chat inmutable habilitado.');
@@ -4591,9 +4708,21 @@ export default function App() {
                     <div className="p-4 border-b border-slate-200 space-y-2.5 bg-white">
                       <div className="flex items-center justify-between">
                         <h2 className="text-lg font-black text-slate-800">Mensajes</h2>
-                        <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800">
-                          {eligibleSessions.length} Chat(s)
-                        </span>
+                        <div className="flex items-center space-x-1.5">
+                          <button
+                            type="button"
+                            onClick={handleRefreshMessages}
+                            disabled={isRefreshingMessages}
+                            className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 transition flex items-center space-x-1 text-xs font-semibold shadow-2xs"
+                            title="Actualizar y sincronizar mensajes"
+                          >
+                            <RefreshCw className={`w-3.5 h-3.5 text-blue-600 ${isRefreshingMessages ? 'animate-spin' : ''}`} />
+                            <span className="hidden sm:inline">Actualizar</span>
+                          </button>
+                          <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                            {eligibleSessions.length} Chat(s)
+                          </span>
+                        </div>
                       </div>
                       <div className="relative">
                         <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
@@ -4691,6 +4820,16 @@ export default function App() {
                           </div>
 
                           <div className="flex items-center space-x-2">
+                            <button
+                              type="button"
+                              onClick={handleRefreshMessages}
+                              disabled={isRefreshingMessages}
+                              className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center space-x-1.5 border border-slate-200 shadow-2xs"
+                              title="Actualizar mensajes de esta tutoría"
+                            >
+                              <RefreshCw className={`w-3.5 h-3.5 text-blue-600 ${isRefreshingMessages ? 'animate-spin' : ''}`} />
+                              <span className="hidden sm:inline">Actualizar</span>
+                            </button>
                             {currentUser.role === 'tutor' && currentConversation.studentId && (
                               <button
                                 type="button"
@@ -4764,6 +4903,7 @@ export default function App() {
                               <p>Aún no hay mensajes en esta tutoría. Escribe el primer mensaje a continuación.</p>
                             </div>
                           )}
+                          <div ref={chatEndRef} />
                         </div>
 
                         {/* Barra de entrada de texto */}
@@ -5208,7 +5348,7 @@ export default function App() {
                               )}
                             </td>
                             <td className="p-3.5 text-right space-x-2">
-                              <button onClick={() => setActiveChatSession(s)} className="px-3.5 py-1.5 bg-slate-100 text-slate-800 font-bold rounded-xl hover:bg-slate-200">Chat</button>
+                              <button onClick={() => { setActiveChatSession(s); setActiveTab('messages'); }} className="px-3.5 py-1.5 bg-slate-100 text-slate-800 font-bold rounded-xl hover:bg-slate-200">Chat</button>
                             </td>
                           </tr>
                         ))}
@@ -5781,29 +5921,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL DE CHAT */}
-      {activeChatSession && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-lg rounded-3xl p-6 shadow-2xl flex flex-col h-[500px]">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-bold text-base text-slate-900">Chat Académico: {activeChatSession.subject}</h3>
-              <button onClick={() => setActiveChatSession(null)}><X className="w-5 h-5 text-slate-500" /></button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50 my-3 rounded-2xl border">
-              {(sessions.find(s => s.id === activeChatSession.id)?.chat || activeChatSession.chat || []).map((msg, idx) => (
-                <div key={idx} className={`p-3.5 rounded-2xl text-sm max-w-[80%] ${msg.sender === currentUser.name ? 'ml-auto text-white' : 'mr-auto bg-white border text-slate-800'}`} style={msg.sender === currentUser.name ? { backgroundColor: primaryColor } : {}}>
-                  <strong className="block text-xs opacity-85 mb-0.5">{msg.sender}</strong>
-                  <span>{msg.text}</span>
-                </div>
-              ))}
-            </div>
-            <form onSubmit={handleSendChatMessage} className="flex gap-2.5">
-              <input type="text" placeholder="Escribe un mensaje..." value={chatMessageText} onChange={e => setChatMessageText(e.target.value)} className="flex-1 p-3 border rounded-xl text-sm" />
-              <button type="submit" className="px-5 py-3 text-white font-bold rounded-xl text-sm transition hover:opacity-90" style={{ backgroundColor: primaryColor }}>Enviar</button>
-            </form>
-          </div>
-        </div>
-      )}
+
 
       {/* MODAL DE ELIMINAR CUENTA */}
       {showDeleteModal && (
