@@ -644,6 +644,12 @@ export default function App() {
   const [tutorNewTutDescription, setTutorNewTutDescription] = useState('');
   const [sessionsFilterStatus, setSessionsFilterStatus] = useState('all');
   const [messagesSearchQuery, setMessagesSearchQuery] = useState('');
+  // Estados para cambio de contraseña en perfil de tutor/estudiante
+  const [profileCurrentPass, setProfileCurrentPass] = useState('');
+  const [profileNewPass, setProfileNewPass] = useState('');
+  const [profileConfirmPass, setProfileConfirmPass] = useState('');
+  const [showProfileNewPass, setShowProfileNewPass] = useState(false);
+
 
 
 
@@ -699,6 +705,14 @@ export default function App() {
       }
       if (sessionsData) setSessions(sessionsData.map(mapSessionFromDB));
       if (careersData && careersData.length > 0) setCareers(careersData);
+      try {
+        const { data: subDB } = await supabase.from('subjects').select('*');
+        if (subDB && subDB.length > 0) {
+          setCatalogSubjects(subDB);
+          try { localStorage.setItem('aura_catalog_subjects', JSON.stringify(subDB)); } catch (e) {}
+        }
+      } catch (e) {}
+
       if (reviewsData) setReviews(reviewsData);
       if (auditsData) setAudits(auditsData.map(mapAuditFromDB).sort((a, b) => (b.id || '').localeCompare(a.id || '')));
       if (notifsData) setNotifications(notifsData.map(mapNotifFromDB));
@@ -1180,6 +1194,47 @@ export default function App() {
     }
   };
 
+  
+  // Función para cambio de contraseña de tutores y estudiantes
+  const handleUpdatePassword = async (e) => {
+    e.preventDefault();
+    if (!profileCurrentPass || !profileNewPass || !profileConfirmPass) {
+      showToast('Por favor completa todos los campos de contraseña', 'danger');
+      return;
+    }
+
+    if (profileCurrentPass !== currentUser.password) {
+      showToast('La contraseña actual es incorrecta', 'danger');
+      return;
+    }
+
+    if (profileNewPass.length < 6) {
+      showToast('La nueva contraseña debe tener al menos 6 caracteres', 'danger');
+      return;
+    }
+
+    if (profileNewPass !== profileConfirmPass) {
+      showToast('La nueva contraseña y su confirmación no coinciden', 'danger');
+      return;
+    }
+
+    const updatedUser = { ...currentUser, password: profileNewPass };
+    const ok = await updateUserInDB(updatedUser);
+    if (ok) {
+      await logAudit(
+        currentUser.name,
+        'CAMBIO DE CONTRASEÑA',
+        'El usuario actualizó su clave de acceso correctamente.'
+      );
+      showToast('¡Contraseña actualizada exitosamente!');
+      setProfileCurrentPass('');
+      setProfileNewPass('');
+      setProfileConfirmPass('');
+    } else {
+      showToast('Error al actualizar la contraseña en la base de datos', 'danger');
+    }
+  };
+
   const handleSaveProfileDetails = async (e) => {
     e.preventDefault();
     if (!profileEditForm.name.trim()) return showToast('El nombre no puede estar vacío.', 'danger');
@@ -1292,8 +1347,27 @@ export default function App() {
     setChatMessageText('');
 
     try {
-      const { error } = await supabase.from('sessions').update({ chat: newChat }).eq('id', activeChatSession.id);
-      if (error) console.error('Error guardando mensaje de chat:', error);
+      const currentMeta = (currentSession.chat || []).find(m => m && m.__meta) || {
+        __meta: true,
+        modality: currentSession.modality || 'Presencial',
+        location: currentSession.location || 'Sede IUJO',
+        description: currentSession.description || ''
+      };
+      const { error } = await supabase.from('sessions').update({ chat: [currentMeta, ...updatedCleanChat] }).eq('id', activeChatSession.id);
+      if (error) console.error('Error guardando mensaje en sessions:', error);
+
+      // Guardar también en tabla messages dedicada si existe
+      try {
+        await supabase.from('messages').insert([{
+          id: newMsg.id,
+          session_id: activeChatSession.id,
+          sender_id: currentUser.id,
+          sender_name: currentUser.name,
+          sender_role: currentUser.role,
+          text: newMsg.text,
+          created_at: new Date().toISOString()
+        }]);
+      } catch (eMsg) {}
     } catch (err) {
       console.error('Error guardando mensaje de chat:', err);
     }
@@ -1312,7 +1386,25 @@ export default function App() {
       return;
     }
 
+    const safeLocation = (tutorNewTutLocation || '').trim() || (tutorNewTutModality === 'Virtual / Online' ? 'Google Meet / Enlace en Chat' : 'Sede Central IUJO');
+    const safeDesc = (tutorNewTutDescription || '').trim() || 'Tutoría programada por el tutor académico.';
     const newId = `ses_${Date.now()}`;
+
+    const metaObj = {
+      __meta: true,
+      modality: tutorNewTutModality || 'Presencial',
+      location: safeLocation,
+      description: safeDesc
+    };
+
+    const sysMsg = {
+      id: `msg_sys_${Date.now()}`,
+      sender: 'Sistema',
+      senderRole: 'system',
+      text: `Tutoría creada por el docente ${currentUser.name}. Modalidad: ${tutorNewTutModality || 'Presencial'} (${safeLocation}).`,
+      time: getVenezuelaTimeString()
+    };
+
     const newSession = {
       id: newId,
       studentId: '',
@@ -1323,40 +1415,71 @@ export default function App() {
       date: tutorNewTutDate,
       time: tutorNewTutTime,
       modality: tutorNewTutModality || 'Presencial',
-      location: tutorNewTutModality === 'Virtual / Online' 
-        ? (tutorNewTutLocation.trim() || 'Google Meet / Enlace en Chat') 
-        : (tutorNewTutLocation.trim() || 'Sede IUJO'),
-      description: tutorNewTutDescription.trim() || 'Tutoría programada por el tutor académico.',
+      location: safeLocation,
+      description: safeDesc,
       status: 'confirmed',
-      chat: [
-        {
-          id: `msg_sys_${Date.now()}`,
-          sender: 'Sistema',
-          senderRole: 'system',
-          text: `Tutoría creada por el docente ${currentUser.name}. Modalidad: ${tutorNewTutModality}.`,
-          time: getVenezuelaTimeString()
-        }
-      ]
+      chat: [sysMsg]
     };
 
     try {
-      const { error } = await supabase.from('sessions').insert([mapSessionToDB(newSession)]);
+      // 1. Intento de inserción con columnas extendidas (si ya ejecutó el SQL)
+      let payload = {
+        id: newId,
+        student_id: '',
+        student_name: 'Cupo Disponible (Abierta)',
+        tutor_id: currentUser.id,
+        tutor_name: currentUser.name,
+        subject: tutorNewTutSubject,
+        date: tutorNewTutDate,
+        time: tutorNewTutTime,
+        status: 'confirmed',
+        modality: tutorNewTutModality || 'Presencial',
+        location: safeLocation,
+        description: safeDesc,
+        chat: [metaObj, sysMsg]
+      };
+
+      let { error } = await supabase.from('sessions').insert([payload]);
+
+      // 2. Si falla porque no existen aún las columnas modality/location en Supabase, reintentar sin ellas
+      if (error && error.message && (error.message.includes('column') || error.message.includes('modality') || error.message.includes('location'))) {
+        delete payload.modality;
+        delete payload.location;
+        delete payload.description;
+        const res2 = await supabase.from('sessions').insert([payload]);
+        error = res2.error;
+      }
+
       if (error) {
         showToast('Error al registrar la tutoría en la base de datos: ' + error.message, 'danger');
         return;
       }
+
+      // También registrar en tabla messages si existe
+      try {
+        await supabase.from('messages').insert([{
+          id: sysMsg.id,
+          session_id: newId,
+          sender_id: currentUser.id,
+          sender_name: 'Sistema',
+          sender_role: 'system',
+          text: sysMsg.text,
+          created_at: new Date().toISOString()
+        }]);
+      } catch (errMsg) {}
+
       setSessions(prev => [newSession, ...prev]);
       await logAudit(
         currentUser.name,
         'TUTORÍA CREADA',
-        `Tutoría de ${tutorNewTutSubject} creada para el ${tutorNewTutDate} a las ${tutorNewTutTime} (${tutorNewTutModality})`
+        `Tutoría de ${tutorNewTutSubject} creada para el ${tutorNewTutDate} a las ${tutorNewTutTime} (${tutorNewTutModality || 'Presencial'})`
       );
       showToast(`¡Tutoría de "${tutorNewTutSubject}" creada exitosamente!`);
       setTutorNewTutDescription('');
       setTutorNewTutLocation('');
     } catch (err) {
       console.error(err);
-      showToast('Error de conexión al guardar la tutoría', 'danger');
+      showToast('Error de conexión al guardar la tutoría: ' + err.message, 'danger');
     }
   };
 
@@ -4329,93 +4452,187 @@ export default function App() {
                   )}
                 </div>
 
-                {/* APARTADO: EDITAR / ACTUALIZAR DATOS PERSONALES */}
+                {/* APARTADO 1: DATOS INSTITUCIONALES (SOLO LECTURA) Y CONTACTO EDITABLE */}
                 <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
                   <div className="flex items-center space-x-3 border-b pb-4">
-                    <Edit3 className="w-6 h-6" style={{ color: primaryColor }} />
+                    <ShieldCheck className="w-6 h-6 text-blue-600" />
                     <div>
-                      <h3 className="font-extrabold text-xl text-slate-900">Visualizar y Actualizar Datos Personales</h3>
-                      <p className="text-sm text-slate-600">Edita la información de tu cuenta en tiempo real.</p>
+                      <h3 className="font-extrabold text-xl text-slate-900">Datos Académicos e Identidad Institucional</h3>
+                      <p className="text-sm text-slate-500">
+                        Los datos de identidad (nombre, cédula, carrera y correo) están protegidos. Solo la administración puede modificarlos.
+                      </p>
                     </div>
                   </div>
 
                   <form onSubmit={handleSaveProfileDetails} className="space-y-6 text-sm">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    {/* DATOS PROTEGIDOS */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 bg-slate-50/80 p-5 rounded-2xl border border-slate-200">
                       <div>
-                        <label className="block text-xs font-black uppercase text-slate-600 mb-2 tracking-wide">Nombre Completo</label>
+                        <div className="flex justify-between items-center mb-1.5">
+                          <label className="block text-xs font-black uppercase text-slate-500 tracking-wide">Nombre Completo</label>
+                          <span className="text-[10px] font-bold text-slate-400">Protegido</span>
+                        </div>
                         <input
                           type="text"
-                          required
-                          value={profileEditForm.name}
-                          onChange={(e) => setProfileEditForm({ ...profileEditForm, name: e.target.value })}
-                          className="w-full p-3.5 border-2 rounded-2xl text-sm font-medium outline-none transition"
+                          disabled
+                          value={currentUser.name}
+                          className="w-full p-3.5 border rounded-2xl text-sm font-bold bg-white text-slate-600 cursor-not-allowed opacity-90"
                         />
                       </div>
+
                       <div>
-                        <label className="block text-xs font-black uppercase text-slate-600 mb-2 tracking-wide">Correo Electrónico</label>
+                        <div className="flex justify-between items-center mb-1.5">
+                          <label className="block text-xs font-black uppercase text-slate-500 tracking-wide">Cédula de Identidad</label>
+                          <span className="text-[10px] font-bold text-slate-400">Protegido</span>
+                        </div>
+                        <input
+                          type="text"
+                          disabled
+                          value={currentUser.cedula || 'V-No registrada'}
+                          className="w-full p-3.5 border rounded-2xl text-sm font-bold bg-white text-slate-600 cursor-not-allowed opacity-90"
+                        />
+                      </div>
+
+                      <div>
+                        <div className="flex justify-between items-center mb-1.5">
+                          <label className="block text-xs font-black uppercase text-slate-500 tracking-wide">Carrera Académica</label>
+                          <span className="text-[10px] font-bold text-slate-400">Protegido</span>
+                        </div>
+                        <input
+                          type="text"
+                          disabled
+                          value={currentUser.career || 'Sin Carrera'}
+                          className="w-full p-3.5 border rounded-2xl text-sm font-bold bg-white text-slate-600 cursor-not-allowed opacity-90"
+                        />
+                      </div>
+
+                      <div>
+                        <div className="flex justify-between items-center mb-1.5">
+                          <label className="block text-xs font-black uppercase text-slate-500 tracking-wide">Correo Institucional</label>
+                          <span className="text-[10px] font-bold text-slate-400">Protegido</span>
+                        </div>
                         <input
                           type="email"
-                          required
-                          value={profileEditForm.email}
-                          onChange={(e) => setProfileEditForm({ ...profileEditForm, email: e.target.value })}
-                          className="w-full p-3.5 border-2 rounded-2xl text-sm font-medium outline-none transition"
+                          disabled
+                          value={currentUser.email}
+                          className="w-full p-3.5 border rounded-2xl text-sm font-bold bg-white text-slate-600 cursor-not-allowed opacity-90"
                         />
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-xs font-black uppercase text-slate-600 mb-2 tracking-wide">Cédula de Identidad</label>
-                        <input
-                          type="text"
-                          value={profileEditForm.cedula}
-                          onChange={(e) => setProfileEditForm({ ...profileEditForm, cedula: e.target.value })}
-                          className="w-full p-3.5 border-2 rounded-2xl text-sm font-medium outline-none transition"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-black uppercase text-slate-600 mb-2 tracking-wide">Teléfono de Contacto</label>
-                        <input
-                          type="text"
-                          value={profileEditForm.phone}
-                          onChange={(e) => setProfileEditForm({ ...profileEditForm, phone: e.target.value })}
-                          className="w-full p-3.5 border-2 rounded-2xl text-sm font-medium outline-none transition"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-xs font-black uppercase text-slate-600 mb-2 tracking-wide">Carrera Académica</label>
-                        <select
-                          value={profileEditForm.career}
-                          onChange={(e) => setProfileEditForm({ ...profileEditForm, career: e.target.value })}
-                          className="w-full p-3.5 border-2 rounded-2xl text-sm font-bold bg-white outline-none transition"
-                        >
-                          {careers.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-black uppercase text-slate-600 mb-2 tracking-wide">Dirección de Habitabilidad</label>
-                        <input
-                          type="text"
-                          value={profileEditForm.address}
-                          onChange={(e) => setProfileEditForm({ ...profileEditForm, address: e.target.value })}
-                          className="w-full p-3.5 border-2 rounded-2xl text-sm font-medium outline-none transition"
-                        />
+                    {/* DATOS DE CONTACTO (EDITABLES) */}
+                    <div>
+                      <h4 className="font-extrabold text-sm uppercase tracking-wider text-slate-700 mb-3">
+                        Datos de Contacto Actualizables
+                      </h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                        <div>
+                          <label className="block text-xs font-black uppercase text-slate-600 mb-2 tracking-wide">Teléfono de Contacto</label>
+                          <input
+                            type="text"
+                            placeholder="0412-1234567"
+                            value={profileEditForm.phone}
+                            onChange={(e) => setProfileEditForm({ ...profileEditForm, phone: e.target.value })}
+                            className="w-full p-3.5 border-2 rounded-2xl text-sm font-medium outline-none transition focus:border-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-black uppercase text-slate-600 mb-2 tracking-wide">Dirección de Habitabilidad</label>
+                          <input
+                            type="text"
+                            placeholder="Caracas, Venezuela"
+                            value={profileEditForm.address}
+                            onChange={(e) => setProfileEditForm({ ...profileEditForm, address: e.target.value })}
+                            className="w-full p-3.5 border-2 rounded-2xl text-sm font-medium outline-none transition focus:border-blue-500"
+                          />
+                        </div>
                       </div>
                     </div>
 
-                    <div className="pt-3">
+                    <div className="pt-2">
                       <button
                         type="submit"
-                        className="text-white font-black px-7 py-3.5 rounded-2xl text-sm shadow-lg transition flex items-center justify-center space-x-2 hover:opacity-90"
+                        className="text-white font-black px-7 py-3 rounded-2xl text-sm shadow-md transition flex items-center justify-center space-x-2 hover:opacity-90"
                         style={{ backgroundColor: primaryColor }}
                       >
                         <Save className="w-4.5 h-4.5" />
-                        <span>Guardar Cambios de Perfil</span>
+                        <span>Guardar Datos de Contacto</span>
                       </button>
                     </div>
+                  </form>
+                </div>
+
+                {/* APARTADO 2: SEGURIDAD Y CAMBIO DE CONTRASEÑA */}
+                <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+                  <div className="flex items-center space-x-3 border-b pb-4">
+                    <KeyRound className="w-6 h-6 text-amber-600" />
+                    <div>
+                      <h3 className="font-extrabold text-xl text-slate-900">Seguridad y Cambio de Contraseña</h3>
+                      <p className="text-sm text-slate-500">Actualiza tu clave de acceso personal al sistema.</p>
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleUpdatePassword} className="space-y-5 text-sm max-w-xl">
+                    <div>
+                      <label className="block text-xs font-black uppercase text-slate-600 mb-2 tracking-wide">
+                        Contraseña Actual
+                      </label>
+                      <input
+                        type="password"
+                        placeholder="••••••••"
+                        required
+                        value={profileCurrentPass}
+                        onChange={e => setProfileCurrentPass(e.target.value)}
+                        className="w-full p-3.5 border-2 rounded-2xl text-sm font-medium outline-none transition focus:border-amber-500"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-black uppercase text-slate-600 mb-2 tracking-wide">
+                          Nueva Contraseña
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showProfileNewPass ? 'text' : 'password'}
+                            placeholder="Mínimo 6 caracteres"
+                            required
+                            value={profileNewPass}
+                            onChange={e => setProfileNewPass(e.target.value)}
+                            className="w-full p-3.5 border-2 rounded-2xl text-sm font-medium outline-none transition focus:border-amber-500 pr-10"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowProfileNewPass(!showProfileNewPass)}
+                            className="absolute right-3.5 top-3.5 text-slate-400 hover:text-slate-600"
+                          >
+                            {showProfileNewPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-black uppercase text-slate-600 mb-2 tracking-wide">
+                          Confirmar Nueva Contraseña
+                        </label>
+                        <input
+                          type={showProfileNewPass ? 'text' : 'password'}
+                          placeholder="Repite la contraseña"
+                          required
+                          value={profileConfirmPass}
+                          onChange={e => setProfileConfirmPass(e.target.value)}
+                          className="w-full p-3.5 border-2 rounded-2xl text-sm font-medium outline-none transition focus:border-amber-500"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="bg-amber-600 hover:bg-amber-700 text-white font-black px-7 py-3 rounded-2xl text-sm shadow-md transition flex items-center justify-center space-x-2"
+                    >
+                      <Lock className="w-4 h-4" />
+                      <span>Actualizar Contraseña</span>
+                    </button>
                   </form>
                 </div>
 
