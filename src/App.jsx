@@ -5,7 +5,7 @@ import {
   Search, Calendar, Download, Filter, Star, PieChart, Camera,
   Palette, Clock, Trash2, ShieldAlert, MessageCircle, CheckCircle,
   XCircle, KeyRound, UserPlus, Bell, X, Mail, Lock, ChevronDown, ChevronRight, Save, Edit3, FileText,
-  TrendingUp, CheckCircle2, Clock3, Upload, UserCheck, UserX
+  TrendingUp, CheckCircle2, Clock3, Upload, UserCheck, UserX, AlertTriangle, Layers, Plus, FileSpreadsheet
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -36,6 +36,81 @@ const INITIAL_CAREERS = [
   { id: 'car_4', code: 'ELC', name: 'Electrónica' },
   { id: 'car_5', code: 'EDIN', name: 'Educación Inicial' },
   { id: 'car_6', code: 'EDPR', name: 'Educación Primaria' }
+];
+
+const INITIAL_CATALOG_SUBJECTS = [
+  // Informática (Semestres 1 a 6)
+  { id: 'sub_inf_1', career: 'Informática', semester: 1, name: 'Algoritmos y Programación I', tutorIds: [] },
+  { id: 'sub_inf_2', career: 'Informática', semester: 1, name: 'Matemática I', tutorIds: [] },
+  { id: 'sub_inf_3', career: 'Informática', semester: 1, name: 'Inglés Técnico I', tutorIds: [] },
+  { id: 'sub_inf_4', career: 'Informática', semester: 2, name: 'Algoritmos y Programación II', tutorIds: [] },
+  { id: 'sub_inf_5', career: 'Informática', semester: 2, name: 'Matemática II', tutorIds: [] },
+  { id: 'sub_inf_6', career: 'Informática', semester: 2, name: 'Arquitectura del Computador', tutorIds: [] },
+  { id: 'sub_inf_7', career: 'Informática', semester: 3, name: 'Estructuras de Datos', tutorIds: [] },
+  { id: 'sub_inf_8', career: 'Informática', semester: 3, name: 'Base de Datos I', tutorIds: [] },
+  { id: 'sub_inf_9', career: 'Informática', semester: 3, name: 'Sistemas Operativos', tutorIds: [] },
+  { id: 'sub_inf_10', career: 'Informática', semester: 4, name: 'Programación Web', tutorIds: [] },
+  { id: 'sub_inf_11', career: 'Informática', semester: 4, name: 'Base de Datos II', tutorIds: [] },
+  { id: 'sub_inf_12', career: 'Informática', semester: 4, name: 'Redes de Computadoras', tutorIds: [] },
+  { id: 'sub_inf_13', career: 'Informática', semester: 5, name: 'Ingeniería de Software', tutorIds: [] },
+  { id: 'sub_inf_14', career: 'Informática', semester: 5, name: 'Seguridad Informática', tutorIds: [] },
+  { id: 'sub_inf_15', career: 'Informática', semester: 5, name: 'Computación en la Nube', tutorIds: [] },
+  { id: 'sub_inf_16', career: 'Informática', semester: 6, name: 'Inteligencia Artificial', tutorIds: [] },
+  { id: 'sub_inf_17', career: 'Informática', semester: 6, name: 'Proyecto Sociotecnológico', tutorIds: [] },
+  { id: 'sub_inf_18', career: 'Informática', semester: 6, name: 'Auditoría de Sistemas', tutorIds: [] },
+
+  // Administración (Semestres 1 a 6)
+  { id: 'sub_adm_1', career: 'Administración', semester: 1, name: 'Fundamentos de Administración', tutorIds: [] },
+  { id: 'sub_adm_2', career: 'Administración', semester: 1, name: 'Contabilidad General I', tutorIds: [] },
+  { id: 'sub_adm_3', career: 'Administración', semester: 1, name: 'Matemática Financiera', tutorIds: [] },
+  { id: 'sub_adm_4', career: 'Administración', semester: 2, name: 'Teoría Administrativa', tutorIds: [] },
+  { id: 'sub_adm_5', career: 'Administración', semester: 2, name: 'Microeconomía', tutorIds: [] },
+  { id: 'sub_adm_6', career: 'Administración', semester: 2, name: 'Estadística Aplicada', tutorIds: [] },
+  { id: 'sub_adm_7', career: 'Administración', semester: 3, name: 'Gestión de Recursos Humanos', tutorIds: [] },
+  { id: 'sub_adm_8', career: 'Administración', semester: 3, name: 'Macroeconomía', tutorIds: [] },
+  { id: 'sub_adm_9', career: 'Administración', semester: 3, name: 'Legislación Mercantil', tutorIds: [] },
+  { id: 'sub_adm_10', career: 'Administración', semester: 4, name: 'Presupuesto y Costos', tutorIds: [] },
+  { id: 'sub_adm_11', career: 'Administración', semester: 4, name: 'Finanzas Corporativas', tutorIds: [] },
+  { id: 'sub_adm_12', career: 'Administración', semester: 4, name: 'Mercadotecnia', tutorIds: [] },
+  { id: 'sub_adm_13', career: 'Administración', semester: 5, name: 'Planificación Estratégica', tutorIds: [] },
+  { id: 'sub_adm_14', career: 'Administración', semester: 5, name: 'Gestión de la Calidad', tutorIds: [] },
+  { id: 'sub_adm_15', career: 'Administración', semester: 5, name: 'Comercio Internacional', tutorIds: [] },
+  { id: 'sub_adm_16', career: 'Administración', semester: 6, name: 'Auditoría Administrativa', tutorIds: [] },
+  { id: 'sub_adm_17', career: 'Administración', semester: 6, name: 'Formulación de Proyectos', tutorIds: [] },
+  { id: 'sub_adm_18', career: 'Administración', semester: 6, name: 'Ética Empresarial', tutorIds: [] },
+
+  // Contaduría (Semestres 1 a 6)
+  { id: 'sub_cont_1', career: 'Contaduría', semester: 1, name: 'Contabilidad I', tutorIds: [] },
+  { id: 'sub_cont_2', career: 'Contaduría', semester: 1, name: 'Matemática Financiera', tutorIds: [] },
+  { id: 'sub_cont_3', career: 'Contaduría', semester: 2, name: 'Contabilidad II', tutorIds: [] },
+  { id: 'sub_cont_4', career: 'Contaduría', semester: 3, name: 'Contabilidad de Costos I', tutorIds: [] },
+  { id: 'sub_cont_5', career: 'Contaduría', semester: 4, name: 'Tributación y Leyes Fiscales', tutorIds: [] },
+  { id: 'sub_cont_6', career: 'Contaduría', semester: 5, name: 'Auditoría Financiera', tutorIds: [] },
+  { id: 'sub_cont_7', career: 'Contaduría', semester: 6, name: 'Seminario de Contabilidad Superior', tutorIds: [] },
+
+  // Electrónica (Semestres 1 a 6)
+  { id: 'sub_elc_1', career: 'Electrónica', semester: 1, name: 'Circuitos Eléctricos I', tutorIds: [] },
+  { id: 'sub_elc_2', career: 'Electrónica', semester: 2, name: 'Dispositivos Semiconductores', tutorIds: [] },
+  { id: 'sub_elc_3', career: 'Electrónica', semester: 3, name: 'Electrónica Analógica y Digital', tutorIds: [] },
+  { id: 'sub_elc_4', career: 'Electrónica', semester: 4, name: 'Microcontroladores y Sistemas Embebidos', tutorIds: [] },
+  { id: 'sub_elc_5', career: 'Electrónica', semester: 5, name: 'Instrumentación y Control', tutorIds: [] },
+  { id: 'sub_elc_6', career: 'Electrónica', semester: 6, name: 'Robótica y Automatización Industrial', tutorIds: [] },
+
+  // Educación Inicial (Semestres 1 a 6)
+  { id: 'sub_edin_1', career: 'Educación Inicial', semester: 1, name: 'Psicología del Desarrollo Infantil', tutorIds: [] },
+  { id: 'sub_edin_2', career: 'Educación Inicial', semester: 2, name: 'Didáctica y Estimulación Temprana', tutorIds: [] },
+  { id: 'sub_edin_3', career: 'Educación Inicial', semester: 3, name: 'Expresión Artística y Musical Infantil', tutorIds: [] },
+  { id: 'sub_edin_4', career: 'Educación Inicial', semester: 4, name: 'Nutrición, Salud y Primeros Auxilios', tutorIds: [] },
+  { id: 'sub_edin_5', career: 'Educación Inicial', semester: 5, name: 'Planificación de la Práctica Docente', tutorIds: [] },
+  { id: 'sub_edin_6', career: 'Educación Inicial', semester: 6, name: 'Gestión de Centros de Educación Inicial', tutorIds: [] },
+
+  // Educación Primaria (Semestres 1 a 6)
+  { id: 'sub_edpr_1', career: 'Educación Primaria', semester: 1, name: 'Fundamentos de la Educación y Comunicación', tutorIds: [] },
+  { id: 'sub_edpr_2', career: 'Educación Primaria', semester: 2, name: 'Didáctica de la Lengua y Matemática Básica', tutorIds: [] },
+  { id: 'sub_edpr_3', career: 'Educación Primaria', semester: 3, name: 'Didáctica de Ciencias Naturales y Sociales', tutorIds: [] },
+  { id: 'sub_edpr_4', career: 'Educación Primaria', semester: 4, name: 'Tecnología Educativa y Lectoescritura', tutorIds: [] },
+  { id: 'sub_edpr_5', career: 'Educación Primaria', semester: 5, name: 'Inclusión Escolar y Currículo de Primaria', tutorIds: [] },
+  { id: 'sub_edpr_6', career: 'Educación Primaria', semester: 6, name: 'Investigación y Práctica Docente Integral', tutorIds: [] }
 ];
 
 const INITIAL_SESSIONS = [];
@@ -501,6 +576,40 @@ export default function App() {
   const [adminCreateShowConfirmPass, setAdminCreateShowConfirmPass] = useState(false);
   const [adminCreateError, setAdminCreateError] = useState('');
   const [adminCreateSubmitting, setAdminCreateSubmitting] = useState(false);
+  // Estados para Catálogo Académico, Pensum y Materias
+  const [catalogSubjects, setCatalogSubjects] = useState(() => {
+    try {
+      const saved = localStorage.getItem('aura_catalog_subjects');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return INITIAL_CATALOG_SUBJECTS;
+  });
+
+  const [careerSemestersConfig, setCareerSemestersConfig] = useState(() => {
+    try {
+      const saved = localStorage.getItem('aura_career_semesters');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return {};
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('aura_catalog_subjects', JSON.stringify(catalogSubjects));
+    } catch (e) {}
+  }, [catalogSubjects]);
+
+  const [careerToDelete, setCareerToDelete] = useState(null);
+  const [showDeleteCareerModal, setShowDeleteCareerModal] = useState(false);
+  const [deletingCareerSubmitting, setDeletingCareerSubmitting] = useState(false);
+  const pensumImportInputRef = useRef(null);
+
+  const [newAdminSubName, setNewAdminSubName] = useState('');
+  const [newAdminSubCareer, setNewAdminSubCareer] = useState(careers[0]?.name || 'Informática');
+  const [newAdminSubSemester, setNewAdminSubSemester] = useState(1);
+  const [newAdminSubSelectedTutorIds, setNewAdminSubSelectedTutorIds] = useState([]);
+  const [showSemesterConfig, setShowSemesterConfig] = useState(false);
+
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -1268,6 +1377,325 @@ export default function App() {
     }
   };
 
+  
+  // Funciones de gestión de Catálogo Académico, Pensum y Materias
+  const handleDeleteCareerConfirm = async () => {
+    if (!careerToDelete) return;
+    setDeletingCareerSubmitting(true);
+    try {
+      const { error } = await supabase.from('careers').delete().eq('id', careerToDelete.id);
+      if (error) {
+        showToast('Error al eliminar carrera de la base de datos: ' + error.message, 'danger');
+        return;
+      }
+      setCareers(prev => prev.filter(c => c.id !== careerToDelete.id));
+      setCatalogSubjects(prev => prev.filter(s => s.career.toLowerCase() !== careerToDelete.name.toLowerCase()));
+      await logAudit(
+        currentUser.name,
+        'CARRERA ELIMINADA',
+        `Se eliminó la carrera ${careerToDelete.name} (${careerToDelete.code}) de la base de datos institucional.`
+      );
+      showToast(`Carrera "${careerToDelete.name}" eliminada exitosamente.`);
+      setShowDeleteCareerModal(false);
+      setCareerToDelete(null);
+    } catch (err) {
+      console.error(err);
+      showToast('Error inesperado: ' + err.message, 'danger');
+    } finally {
+      setDeletingCareerSubmitting(false);
+    }
+  };
+
+  const handleExportPensumCSV = () => {
+    const rows = [];
+    careers.forEach(car => {
+      const subsInCareer = catalogSubjects.filter(s => s.career.toLowerCase() === car.name.toLowerCase());
+      subsInCareer.forEach(sub => {
+        const tutorNames = (sub.tutorIds || [])
+          .map(id => users.find(u => u.id === id)?.name)
+          .filter(Boolean)
+          .join('; ');
+        rows.push({
+          Carrera: car.name,
+          Codigo_Carrera: car.code,
+          Semestre: sub.semester || 1,
+          Materia: sub.name,
+          Tutores_Asignados: tutorNames || 'Sin tutores asignados'
+        });
+      });
+    });
+
+    if (rows.length === 0) {
+      showToast('No hay materias registradas en el pensum para exportar', 'danger');
+      return;
+    }
+
+    const headers = ['Carrera', 'Codigo_Carrera', 'Semestre', 'Materia', 'Tutores_Asignados'].join(',');
+    const csvContent = rows.map(r => `"${r.Carrera}","${r.Codigo_Carrera}","${r.Semestre}","${r.Materia}","${r.Tutores_Asignados}"`).join('\n');
+    const blob = new Blob([`\uFEFF${headers}\n${csvContent}`], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `pensum_academico_${getVenezuelaDateString()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('Pensum académico exportado con éxito en formato CSV');
+  };
+
+  const handleDownloadPensumTemplate = () => {
+    const headers = ['Carrera', 'Codigo', 'Semestre', 'Materia', 'Tutores'].join(',');
+    const sampleRows = [
+      '"Informática","INF","1","Algoritmos y Programación I",""',
+      '"Informática","INF","2","Algoritmos y Programación II",""',
+      '"Informática","INF","3","Estructuras de Datos",""',
+      '"Administración","ADM","1","Fundamentos de Administración",""',
+      '"Administración","ADM","2","Teoría Administrativa",""'
+    ].join('\n');
+    const blob = new Blob([`\uFEFF${headers}\n${sampleRows}`], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'plantilla_pensum_academico.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('Plantilla de pensum descargada correctamente');
+  };
+
+  const handleImportPensumCSV = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const text = evt.target.result;
+        const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        if (lines.length < 2) {
+          showToast('El archivo CSV de pensum está vacío o sin datos válidos', 'danger');
+          return;
+        }
+
+        const firstLine = lines[0];
+        const separator = firstLine.includes(';') ? ';' : ',';
+        const rawHeaders = firstLine.split(separator).map(h => h.replace(/^[\"']|[\"']$/g, '').trim().toLowerCase());
+
+        const careerIdx = rawHeaders.findIndex(h => h.includes('carrera'));
+        const codeIdx = rawHeaders.findIndex(h => h.includes('codigo') || h.includes('código'));
+        const semesterIdx = rawHeaders.findIndex(h => h.includes('semestre'));
+        const subjectIdx = rawHeaders.findIndex(h => h.includes('materia') || h.includes('asignatura'));
+        const tutorsIdx = rawHeaders.findIndex(h => h.includes('tutor'));
+
+        if (careerIdx === -1 || subjectIdx === -1) {
+          showToast('El archivo debe incluir al menos las columnas "Carrera" y "Materia".', 'danger');
+          return;
+        }
+
+        let newCareersCount = 0;
+        let newSubjectsCount = 0;
+        let existingCareersList = [...careers];
+        let updatedCatalog = [...catalogSubjects];
+        const activeTutors = users.filter(u => u.role === 'tutor');
+        const tutorsToUpdate = new Map();
+
+        for (let i = 1; i < lines.length; i++) {
+          const rawRow = lines[i];
+          if (!rawRow) continue;
+
+          const regex = new RegExp(`(?:^|${separator})(?:"([^"]*(?:""[^"]*)*)"|([^\${separator}]*))`, 'g');
+          let match;
+          const row = [];
+          while ((match = regex.exec(rawRow)) !== null) {
+            let val = match[1] !== undefined ? match[1].replace(/""/g, '"') : match[2];
+            row.push((val || '').trim());
+            if (regex.lastIndex >= rawRow.length) break;
+          }
+
+          const careerName = row[careerIdx];
+          const subjectName = row[subjectIdx];
+          if (!careerName || !subjectName) continue;
+
+          const careerCode = (codeIdx !== -1 && row[codeIdx]) ? row[codeIdx].toUpperCase() : careerName.slice(0, 4).toUpperCase();
+          let semesterNum = 1;
+          if (semesterIdx !== -1 && row[semesterIdx]) {
+            const parsedSem = parseInt(row[semesterIdx].replace(/\D/g, ''), 10);
+            if (parsedSem >= 1 && parsedSem <= 6) semesterNum = parsedSem;
+          }
+
+          let careerObj = existingCareersList.find(c => c.name.toLowerCase() === careerName.toLowerCase());
+          if (!careerObj) {
+            const newCarId = `car_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+            careerObj = { id: newCarId, code: careerCode, name: careerName };
+            try {
+              const { error } = await supabase.from('careers').insert([careerObj]);
+              if (!error) {
+                existingCareersList.push(careerObj);
+                newCareersCount++;
+              }
+            } catch (err) {
+              console.error('Error insertando carrera desde pensum:', err);
+            }
+          }
+
+          const assignedTutorIds = [];
+          if (tutorsIdx !== -1 && row[tutorsIdx]) {
+            const tutorParts = row[tutorsIdx].split(/[,|;]/).map(t => t.trim().toLowerCase()).filter(Boolean);
+            activeTutors.forEach(tut => {
+              if (tutorParts.some(tp => tut.name.toLowerCase().includes(tp) || tut.email.toLowerCase() === tp)) {
+                if (!assignedTutorIds.includes(tut.id)) {
+                  assignedTutorIds.push(tut.id);
+                  const currentTut = tutorsToUpdate.get(tut.id) || { ...tut };
+                  const currentDetailed = currentTut.subjectsDetailed || [];
+                  if (!currentDetailed.some(sd => sd.name.toLowerCase() === subjectName.toLowerCase() && sd.career.toLowerCase() === careerObj.name.toLowerCase())) {
+                    currentTut.subjectsDetailed = [...currentDetailed, {
+                      id: `sub_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+                      name: subjectName,
+                      career: careerObj.name,
+                      semester: semesterNum,
+                      day: 'Lunes a Viernes',
+                      time: 'Horario coordinable'
+                    }];
+                    currentTut.subjects = Array.from(new Set([...(currentTut.subjects || []), subjectName]));
+                    tutorsToUpdate.set(tut.id, currentTut);
+                  }
+                }
+              }
+            });
+          }
+
+          const existingSubIdx = updatedCatalog.findIndex(s => s.name.toLowerCase() === subjectName.toLowerCase() && s.career.toLowerCase() === careerObj.name.toLowerCase());
+          if (existingSubIdx === -1) {
+            updatedCatalog.push({
+              id: `sub_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+              career: careerObj.name,
+              semester: semesterNum,
+              name: subjectName,
+              tutorIds: assignedTutorIds
+            });
+            newSubjectsCount++;
+          } else {
+            const existingSub = updatedCatalog[existingSubIdx];
+            updatedCatalog[existingSubIdx] = {
+              ...existingSub,
+              semester: semesterNum || existingSub.semester,
+              tutorIds: Array.from(new Set([...(existingSub.tutorIds || []), ...assignedTutorIds]))
+            };
+          }
+        }
+
+        setCareers(existingCareersList);
+        setCatalogSubjects(updatedCatalog);
+        try {
+          localStorage.setItem('aura_catalog_subjects', JSON.stringify(updatedCatalog));
+        } catch (e) {}
+
+        for (const tut of tutorsToUpdate.values()) {
+          await updateUserInDB(tut);
+        }
+
+        await logAudit(
+          currentUser.name,
+          'IMPORTACIÓN PENSUM',
+          `Pensum importado e integrado: ${newCareersCount} carrera(s) y ${newSubjectsCount} materia(s) nuevas.`
+        );
+
+        showToast(`¡Pensum integrado! ${newCareersCount} carrera(s) y ${newSubjectsCount} materia(s) agregadas.`);
+      } catch (err) {
+        console.error(err);
+        showToast('Error al importar el pensum: ' + err.message, 'danger');
+      } finally {
+        if (pensumImportInputRef.current) pensumImportInputRef.current.value = '';
+      }
+    };
+    reader.readAsText(file, 'UTF-8');
+  };
+
+  const handleAddAdminSubject = async (e) => {
+    if (e) e.preventDefault();
+    if (!newAdminSubName.trim()) {
+      showToast('Por favor ingresa el nombre de la materia', 'danger');
+      return;
+    }
+    const careerName = newAdminSubCareer || careers[0]?.name || 'Informática';
+    const semesterNum = Number(newAdminSubSemester) || 1;
+    const subName = newAdminSubName.trim();
+
+    const exists = catalogSubjects.some(
+      s => s.career.toLowerCase() === careerName.toLowerCase() && s.name.toLowerCase() === subName.toLowerCase()
+    );
+    if (exists) {
+      showToast(`La materia "${subName}" ya existe en el pensum de ${careerName}`, 'danger');
+      return;
+    }
+
+    const newSubjectObj = {
+      id: `sub_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      career: careerName,
+      semester: semesterNum,
+      name: subName,
+      tutorIds: [...newAdminSubSelectedTutorIds]
+    };
+
+    const updatedCatalog = [...catalogSubjects, newSubjectObj];
+    setCatalogSubjects(updatedCatalog);
+    try {
+      localStorage.setItem('aura_catalog_subjects', JSON.stringify(updatedCatalog));
+    } catch (err) {}
+
+    let assignedCount = 0;
+    for (const tutorId of newAdminSubSelectedTutorIds) {
+      const tutor = users.find(u => u.id === tutorId);
+      if (tutor) {
+        const currentDetailed = Array.isArray(tutor.subjectsDetailed) ? tutor.subjectsDetailed : [];
+        const newDetailed = [...currentDetailed, {
+          id: `sd_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+          name: subName,
+          career: careerName,
+          semester: semesterNum,
+          day: 'Lunes a Viernes',
+          time: 'Horario coordinable'
+        }];
+        const updatedSubjectNames = Array.from(new Set([...(tutor.subjects || []), subName]));
+        const updatedTutorObj = {
+          ...tutor,
+          subjects: updatedSubjectNames,
+          subjectsDetailed: newDetailed
+        };
+        await updateUserInDB(updatedTutorObj);
+        assignedCount++;
+      }
+    }
+
+    await logAudit(
+      currentUser.name,
+      'MATERIA AÑADIDA',
+      `Se añadió la materia "${subName}" a ${careerName} (Semestre ${semesterNum}) con ${assignedCount} tutor(es) asignado(s).`
+    );
+
+    showToast(`Materia "${subName}" agregada con éxito al catálogo institucional.`);
+    setNewAdminSubName('');
+    setNewAdminSubSelectedTutorIds([]);
+  };
+
+  const handleDeleteSubjectFromCatalog = async (subjectId, subjectName, careerName) => {
+    if (!window.confirm(`¿Estás seguro de que deseas eliminar la materia "${subjectName}" del pensum de ${careerName}?`)) {
+      return;
+    }
+    const updatedCatalog = catalogSubjects.filter(s => s.id !== subjectId && !(s.name === subjectName && s.career === careerName));
+    setCatalogSubjects(updatedCatalog);
+    try {
+      localStorage.setItem('aura_catalog_subjects', JSON.stringify(updatedCatalog));
+    } catch (err) {}
+
+    await logAudit(
+      currentUser.name,
+      'MATERIA ELIMINADA',
+      `Se eliminó la materia "${subjectName}" del catálogo de ${careerName}.`
+    );
+    showToast(`Materia "${subjectName}" eliminada del catálogo.`);
+  };
+
   const exportDataToCSV = (filename, dataArray) => {
     if (dataArray.length === 0) return showToast('No hay datos para exportar', 'danger');
     const headers = Object.keys(dataArray[0]).join(',');
@@ -1808,17 +2236,58 @@ export default function App() {
 
             {activeTab === 'admin_academic' && currentUser.role === 'admin' && (
               <div className="space-y-6">
-                <div className="bg-white p-6 rounded-3xl border shadow-sm flex justify-between items-center">
-                  <h2 className="text-xl font-black text-slate-800">RFADM02 - Catálogo Académico</h2>
-                  <button onClick={() => exportDataToCSV('catalogo_materias', careers)} className="px-3.5 py-2 bg-slate-100 font-bold text-sm rounded-xl flex items-center space-x-1.5 hover:bg-slate-200 transition">
-                    <Download className="w-4.5 h-4.5" /> <span>Exportar Catálogo CSV</span>
-                  </button>
+                {/* ENCABEZADO Y ACCIONES DE IMPORTACIÓN / EXPORTACIÓN DE PENSUM */}
+                <div className="bg-white p-6 rounded-3xl border shadow-sm flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+                  <div>
+                    <h2 className="text-xl font-black text-slate-800">RFADM02 - Catálogo Académico y Pensum</h2>
+                    <p className="text-xs text-slate-500 mt-0.5">Gestión integral de carreras, semestres, materias y asignación de tutores.</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="file"
+                      ref={pensumImportInputRef}
+                      onChange={handleImportPensumCSV}
+                      accept=".csv"
+                      className="hidden"
+                    />
+                    <button
+                      onClick={() => pensumImportInputRef.current?.click()}
+                      className="px-3.5 py-2.5 bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 font-bold text-xs rounded-xl flex items-center space-x-1.5 transition shadow-xs"
+                      title="Importa un archivo CSV con el pensum para integrar carreras y materias automáticamente"
+                    >
+                      <Upload className="w-4 h-4" />
+                      <span>Importar Pensum (CSV)</span>
+                    </button>
+
+                    <button
+                      onClick={handleExportPensumCSV}
+                      className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl flex items-center space-x-1.5 transition shadow-xs"
+                      title="Descarga el pensum académico actual con todas sus carreras y materias"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Exportar Pensum (CSV)</span>
+                    </button>
+
+                    <button
+                      onClick={handleDownloadPensumTemplate}
+                      className="px-3 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 font-semibold text-xs rounded-xl flex items-center space-x-1 transition"
+                      title="Descarga una plantilla de ejemplo para importar pensums"
+                    >
+                      <FileSpreadsheet className="w-3.5 h-3.5" />
+                      <span>Plantilla</span>
+                    </button>
+                  </div>
                 </div>
 
+                {/* FILTROS DE BÚSQUEDA */}
                 <div className="bg-white p-5 rounded-3xl border shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-xs font-bold uppercase text-slate-600 mb-1.5">Filtrar por Carrera</label>
-                    <select value={filterCareer} onChange={(e) => setFilterCareer(e.target.value)} className="w-full p-3 border rounded-xl text-sm bg-white font-medium text-slate-700">
+                    <select
+                      value={filterCareer}
+                      onChange={(e) => setFilterCareer(e.target.value)}
+                      className="w-full p-3 border rounded-xl text-sm bg-white font-medium text-slate-700"
+                    >
                       <option value="">Todas las carreras</option>
                       {careers.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                     </select>
@@ -1826,9 +2295,16 @@ export default function App() {
 
                   <div>
                     <label className="block text-xs font-bold uppercase text-slate-600 mb-1.5">Filtrar por Materia</label>
-                    <select value={filterSubject} onChange={(e) => setFilterSubject(e.target.value)} className="w-full p-3 border rounded-xl text-sm bg-white font-medium text-slate-700">
+                    <select
+                      value={filterSubject}
+                      onChange={(e) => setFilterSubject(e.target.value)}
+                      className="w-full p-3 border rounded-xl text-sm bg-white font-medium text-slate-700"
+                    >
                       <option value="">Todas las materias</option>
-                      {Array.from(new Set(users.filter(u => u.role === 'tutor' && u.subjectsDetailed).flatMap(u => u.subjectsDetailed.map(sd => sd.name))))
+                      {Array.from(new Set([
+                        ...catalogSubjects.map(s => s.name),
+                        ...users.filter(u => u.role === 'tutor' && u.subjectsDetailed).flatMap(u => u.subjectsDetailed.map(sd => sd.name))
+                      ]))
                         .sort((a, b) => a.localeCompare(b))
                         .map((sub, i) => <option key={i} value={sub}>{sub}</option>)}
                     </select>
@@ -1838,7 +2314,13 @@ export default function App() {
                     <label className="block text-xs font-bold uppercase text-slate-600 mb-1.5">Filtrar por Nombre de Tutor</label>
                     <div className="relative">
                       <Search className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
-                      <input type="text" placeholder="Escribe el nombre..." value={filterTutorText} onChange={(e) => setFilterTutorText(e.target.value)} className="w-full pl-9 pr-3.5 py-3 border rounded-xl text-sm font-medium text-slate-700" />
+                      <input
+                        type="text"
+                        placeholder="Escribe el nombre..."
+                        value={filterTutorText}
+                        onChange={(e) => setFilterTutorText(e.target.value)}
+                        className="w-full pl-9 pr-3.5 py-3 border rounded-xl text-sm font-medium text-slate-700"
+                      />
                     </div>
                   </div>
                 </div>
@@ -1846,77 +2328,216 @@ export default function App() {
                 {(filterCareer || filterSubject || filterTutorText) && (
                   <div className="flex items-center justify-between bg-slate-100 border border-slate-200 px-5 py-3 rounded-2xl text-sm">
                     <span className="font-bold text-slate-700">Filtros activos aplicados</span>
-                    <button onClick={() => { setFilterCareer(''); setFilterSubject(''); setFilterTutorText(''); }} className="text-slate-600 hover:text-slate-900 font-bold underline">Limpiar filtros</button>
+                    <button
+                      onClick={() => { setFilterCareer(''); setFilterSubject(''); setFilterTutorText(''); }}
+                      className="text-slate-600 hover:text-slate-900 font-bold underline"
+                    >
+                      Limpiar filtros
+                    </button>
                   </div>
                 )}
 
+                {/* CONTENIDO PRINCIPAL: LISTA DE CARRERAS Y FORMULARIOS */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* COLUMNA IZQUIERDA: CARRERAS, MATERIAS Y PENSUM */}
                   <div className="lg:col-span-2 bg-white p-6 rounded-3xl border shadow-sm space-y-4">
-                    <h3 className="font-bold text-lg text-slate-800">Carreras y Materias Registradas</h3>
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-bold text-lg text-slate-800">Carreras y Materias Registradas</h3>
+                      <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+                        {careers.length} carreras en el sistema
+                      </span>
+                    </div>
+
                     <div className="space-y-3">
                       {careers.filter(c => filterCareer ? c.name === filterCareer : true).map(c => {
                         const isExpanded = expandedCareerId === c.id;
                         const tutorsInCareer = users.filter(u => {
                           const matchesTutorText = filterTutorText ? u.name.toLowerCase().includes(filterTutorText.toLowerCase().trim()) : true;
-                          const hasSubjectInThisCareer = u.role === 'tutor' && (u.subjectsDetailed || []).some(sd => sd.career === c.name);
+                          const hasSubjectInThisCareer = u.role === 'tutor' && (
+                            (u.subjectsDetailed || []).some(sd => sd.career?.toLowerCase() === c.name.toLowerCase()) ||
+                            catalogSubjects.some(sub => sub.career?.toLowerCase() === c.name.toLowerCase() && (sub.tutorIds || []).includes(u.id))
+                          );
                           return matchesTutorText && hasSubjectInThisCareer;
                         });
 
+                        // Unificar materias registradas en pensum y asociadas a tutores
                         const subjectMap = new Map();
-                        users.filter(u => u.role === 'tutor' && u.subjectsDetailed).forEach(t => {
-                          t.subjectsDetailed.forEach(sd => {
-                            if (sd.career === c.name) {
-                              const matchesSubFilter = filterSubject ? sd.name === filterSubject : true;
-                              if (matchesSubFilter) {
-                                const sessionCount = sessions.filter(s => s.subject === sd.name).length;
-                                if (!subjectMap.has(sd.name)) {
-                                  subjectMap.set(sd.name, { name: sd.name, sessionsCount: sessionCount, tutorsCount: 1 });
-                                } else {
-                                  const existing = subjectMap.get(sd.name);
-                                  existing.sessionsCount += sessionCount;
-                                  existing.tutorsCount += 1;
-                                }
-                              }
-                            }
-                          });
+                        // 1. Materias del catálogo
+                        catalogSubjects.filter(s => s.career?.toLowerCase() === c.name.toLowerCase()).forEach(s => {
+                          const matchesSubFilter = filterSubject ? s.name === filterSubject : true;
+                          if (matchesSubFilter) {
+                            const sessionCount = sessions.filter(ses => ses.subject === s.name).length;
+                            subjectMap.set(s.name.toLowerCase(), {
+                              id: s.id,
+                              name: s.name,
+                              semester: s.semester || 1,
+                              sessionsCount: sessionCount,
+                              tutorIds: [...(s.tutorIds || [])]
+                            });
+                          }
                         });
 
-                        const aggregatedSubjects = Array.from(subjectMap.values()).sort((a, b) => a.name.localeCompare(b.name));
-                        if (filterSubject && aggregatedSubjects.length === 0) return null;
+                        // 2. Materias detalladas de tutores
+                        users.filter(u => u.role === 'tutor' && u.subjectsDetailed).forEach(t => {
+                          const matchesTutorText = filterTutorText ? t.name.toLowerCase().includes(filterTutorText.toLowerCase().trim()) : true;
+                          if (matchesTutorText) {
+                            t.subjectsDetailed.forEach(sd => {
+                              if (sd.career?.toLowerCase() === c.name.toLowerCase()) {
+                                const matchesSubFilter = filterSubject ? sd.name === filterSubject : true;
+                                if (matchesSubFilter) {
+                                  const key = sd.name.toLowerCase();
+                                  const sessionCount = sessions.filter(ses => ses.subject === sd.name).length;
+                                  if (!subjectMap.has(key)) {
+                                    subjectMap.set(key, {
+                                      id: sd.id || `sub_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+                                      name: sd.name,
+                                      semester: sd.semester || 1,
+                                      sessionsCount: sessionCount,
+                                      tutorIds: [t.id]
+                                    });
+                                  } else {
+                                    const item = subjectMap.get(key);
+                                    if (!item.tutorIds.includes(t.id)) {
+                                      item.tutorIds.push(t.id);
+                                    }
+                                  }
+                                }
+                              }
+                            });
+                          }
+                        });
+
+                        const careerSubjects = Array.from(subjectMap.values()).sort((a, b) => {
+                          if (a.semester !== b.semester) return a.semester - b.semester;
+                          return a.name.localeCompare(b.name);
+                        });
+
+                        if (filterSubject && careerSubjects.length === 0) return null;
+                        const maxSemestersForThisCareer = careerSemestersConfig[c.name] || 6;
 
                         return (
-                          <div key={c.id} className="border rounded-2xl bg-slate-50 overflow-hidden transition">
-                            <div onClick={() => setExpandedCareerId(isExpanded ? null : c.id)} className="p-4.5 flex justify-between items-center cursor-pointer hover:bg-slate-100 transition">
+                          <div key={c.id} className="border rounded-2xl bg-slate-50 overflow-hidden transition shadow-xs">
+                            <div
+                              onClick={() => setExpandedCareerId(isExpanded ? null : c.id)}
+                              className="p-4.5 flex justify-between items-center cursor-pointer hover:bg-slate-100 transition"
+                            >
                               <div className="flex items-center space-x-3">
                                 {isExpanded ? <ChevronDown className="w-5 h-5 text-slate-600" /> : <ChevronRight className="w-5 h-5 text-slate-400" />}
                                 <div>
                                   <span className="font-bold text-base text-slate-800 block">{c.name}</span>
-                                  <span className="text-xs text-slate-500">{tutorsInCareer.length} tutor(es) coinciden</span>
+                                  <span className="text-xs text-slate-500">
+                                    {careerSubjects.length} materia(s) en pensum • {tutorsInCareer.length} tutor(es) coinciden
+                                  </span>
                                 </div>
                               </div>
-                              <div className="flex items-center space-x-2.5">
-                                <span className="text-xs font-bold px-3 py-1 bg-slate-200 text-slate-700 rounded-lg">{aggregatedSubjects.length} Materia(s)</span>
-                                <span className="font-black px-3 py-1 bg-white border rounded-xl shadow-sm text-sm" style={{ color: primaryColor }}>{c.code}</span>
+                              <div className="flex items-center space-x-2">
+                                <span className="font-black px-2.5 py-1 bg-white border rounded-xl shadow-xs text-xs" style={{ color: primaryColor }}>
+                                  {c.code}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setCareerToDelete(c);
+                                    setShowDeleteCareerModal(true);
+                                  }}
+                                  className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition"
+                                  title="Eliminar Carrera del Sistema"
+                                >
+                                  <Trash2 className="w-4.5 h-4.5" />
+                                </button>
                               </div>
                             </div>
 
                             {isExpanded && (
-                              <div className="p-4.5 bg-white border-t space-y-3">
-                                <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Materias y Total de Tutorías:</h4>
-                                {aggregatedSubjects.length > 0 ? (
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    {aggregatedSubjects.map((item, idx) => (
-                                      <div key={idx} className="p-3.5 rounded-xl border bg-slate-50 flex flex-col justify-between text-sm space-y-1.5">
-                                        <span className="font-bold text-slate-900">{item.name}</span>
-                                        <div className="flex justify-between items-center text-xs text-slate-600 pt-2 border-t">
-                                          <span>Tutorías reservadas: <strong style={{ color: primaryColor }}>{item.sessionsCount}</strong></span>
-                                          <span>Tutores impartiendo: <strong className="text-slate-800">{item.tutorsCount}</strong></span>
+                              <div className="p-4.5 bg-white border-t space-y-4">
+                                <div className="flex justify-between items-center pb-2 border-b">
+                                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center space-x-1.5">
+                                    <Layers className="w-4 h-4 text-slate-400" />
+                                    <span>Pensum Académico por Semestres</span>
+                                  </h4>
+                                  <span className="text-xs font-bold text-slate-500">
+                                    Total: {careerSubjects.length} materia(s)
+                                  </span>
+                                </div>
+
+                                {careerSubjects.length > 0 ? (
+                                  <div className="space-y-4">
+                                    {Array.from({ length: maxSemestersForThisCareer }, (_, idx) => idx + 1).map(semNum => {
+                                      const subjectsInSem = careerSubjects.filter(s => (s.semester || 1) === semNum);
+                                      if (subjectsInSem.length === 0) return null;
+
+                                      return (
+                                        <div key={semNum} className="space-y-2">
+                                          <div className="flex items-center space-x-2">
+                                            <span className="text-xs font-black uppercase px-2.5 py-0.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200">
+                                              Semestre {semNum}
+                                            </span>
+                                            <div className="h-px bg-slate-200 flex-1"></div>
+                                          </div>
+
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            {subjectsInSem.map((item) => {
+                                              const assignedTutors = (item.tutorIds || [])
+                                                .map(tid => users.find(u => u.id === tid))
+                                                .filter(Boolean);
+
+                                              return (
+                                                <div
+                                                  key={item.id}
+                                                  className="p-3.5 rounded-xl border bg-slate-50/80 hover:bg-slate-50 transition flex flex-col justify-between text-sm space-y-2 relative group shadow-xs"
+                                                >
+                                                  <div className="flex items-start justify-between gap-2">
+                                                    <span className="font-bold text-slate-900 leading-tight">{item.name}</span>
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => handleDeleteSubjectFromCatalog(item.id, item.name, c.name)}
+                                                      className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition shrink-0"
+                                                      title="Eliminar materia del catálogo"
+                                                    >
+                                                      <Trash2 className="w-3.5 h-3.5" />
+                                                    </button>
+                                                  </div>
+
+                                                  <div className="pt-2 border-t border-slate-200/60 space-y-1.5 text-xs">
+                                                    <div className="flex items-center justify-between text-slate-600">
+                                                      <span>Tutorías reservadas:</span>
+                                                      <strong style={{ color: primaryColor }}>{item.sessionsCount}</strong>
+                                                    </div>
+                                                    <div className="flex flex-col gap-1">
+                                                      <span className="text-[11px] font-semibold text-slate-500">Tutores asignados:</span>
+                                                      {assignedTutors.length > 0 ? (
+                                                        <div className="flex flex-wrap gap-1">
+                                                          {assignedTutors.map(tut => (
+                                                            <span
+                                                              key={tut.id}
+                                                              className="inline-flex items-center px-2 py-0.5 rounded-md bg-white border border-slate-200 text-[11px] font-medium text-slate-700"
+                                                            >
+                                                              {tut.name}
+                                                            </span>
+                                                          ))}
+                                                        </div>
+                                                      ) : (
+                                                        <span className="text-[11px] text-slate-400 italic">Sin tutores asignados aún</span>
+                                                      )}
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
                                         </div>
-                                      </div>
-                                    ))}
+                                      );
+                                    })}
                                   </div>
                                 ) : (
-                                  <p className="text-sm text-slate-500 italic py-2">No hay materias registradas para los criterios seleccionados en esta carrera.</p>
+                                  <div className="text-center py-6 border border-dashed rounded-2xl bg-slate-50/50 space-y-2">
+                                    <BookOpen className="w-8 h-8 text-slate-300 mx-auto" />
+                                    <p className="text-sm font-semibold text-slate-600">No hay materias registradas en este pensum.</p>
+                                    <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                                      Usa el formulario a la derecha para agregar una nueva materia o importa el pensum completo en formato CSV.
+                                    </p>
+                                  </div>
                                 )}
                               </div>
                             )}
@@ -1926,34 +2547,214 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="bg-white p-6 rounded-3xl border shadow-sm space-y-4 h-fit">
-                    <h3 className="font-bold text-lg text-slate-800">Agregar Nueva Carrera</h3>
-                    <div className="space-y-3.5">
-                      <div>
-                        <label className="block text-xs font-bold uppercase text-slate-600 mb-1.5">Nombre de Carrera</label>
-                        <input type="text" placeholder="Ej. Ingeniería de Software" value={newCareerName} onChange={e => setNewCareerName(e.target.value)} className="w-full p-3 border rounded-xl text-sm" />
+                  {/* COLUMNA DERECHA: FORMULARIOS DE NUEVA CARRERA Y NUEVA MATERIA */}
+                  <div className="space-y-6">
+                    {/* FORMULARIO 1: AGREGAR NUEVA CARRERA */}
+                    <div className="bg-white p-6 rounded-3xl border shadow-sm space-y-4">
+                      <div className="flex items-center space-x-2 border-b pb-3">
+                        <div className="p-2 rounded-xl bg-blue-50 text-blue-600">
+                          <Plus className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-base text-slate-800">Agregar Nueva Carrera</h3>
+                          <p className="text-xs text-slate-500">Registra una carrera en la base de datos.</p>
+                        </div>
                       </div>
-                      <div>
-                        <label className="block text-xs font-bold uppercase text-slate-600 mb-1.5">Código</label>
-                        <input type="text" placeholder="Ej. ISW" value={newCareerCode} onChange={e => setNewCareerCode(e.target.value)} className="w-full p-3 border rounded-xl text-sm" />
+
+                      <div className="space-y-3.5">
+                        <div>
+                          <label className="block text-xs font-bold uppercase text-slate-600 mb-1.5">Nombre de Carrera</label>
+                          <input
+                            type="text"
+                            placeholder="Ej. Ingeniería de Software"
+                            value={newCareerName}
+                            onChange={e => setNewCareerName(e.target.value)}
+                            className="w-full p-3 border rounded-xl text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold uppercase text-slate-600 mb-1.5">Código</label>
+                          <input
+                            type="text"
+                            placeholder="Ej. ISW"
+                            value={newCareerCode}
+                            onChange={e => setNewCareerCode(e.target.value)}
+                            className="w-full p-3 border rounded-xl text-sm uppercase"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!newCareerName || !newCareerCode) return showToast('Completa los campos', 'danger');
+                            const newCar = { id: `car_${Date.now()}`, code: newCareerCode.trim().toUpperCase(), name: newCareerName.trim() };
+                            try {
+                              const { error } = await supabase.from('careers').insert([newCar]);
+                              if (error) {
+                                showToast('Error al guardar carrera en BD: ' + error.message, 'danger');
+                                return;
+                              }
+                              setCareers(prev => [...prev, newCar]);
+                              setNewCareerName('');
+                              setNewCareerCode('');
+                              await logAudit(currentUser.name, 'CARRERA AÑADIDA', `Nueva carrera: ${newCar.name} (${newCar.code})`);
+                              showToast('Carrera agregada con éxito a la base de datos');
+                            } catch (e) {
+                              console.error(e);
+                            }
+                          }}
+                          className="w-full text-white font-bold py-3 rounded-xl text-sm shadow-md transition hover:opacity-90 flex items-center justify-center space-x-2"
+                          style={{ backgroundColor: primaryColor }}
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Agregar Carrera</span>
+                        </button>
                       </div>
-                      <button onClick={async () => {
-                        if (!newCareerName || !newCareerCode) return showToast('Completa los campos', 'danger');
-                        const newCar = { id: `car_${Date.now()}`, code: newCareerCode.trim(), name: newCareerName.trim() };
-                        try {
-                          const { error } = await supabase.from('careers').insert([newCar]);
-                          if (error) {
-                            showToast('Error al guardar carrera en BD: ' + error.message, 'danger');
-                            return;
-                          }
-                          setCareers(prev => [...prev, newCar]);
-                          setNewCareerName(''); setNewCareerCode('');
-                          await logAudit(currentUser.name, 'CARRERA AÑADIDA', `Nueva carrera: ${newCar.name}`);
-                          showToast('Carrera actualizada con éxito');
-                        } catch (e) {
-                          console.error(e);
-                        }
-                      }} className="w-full text-white font-bold py-3 rounded-xl text-sm shadow-md transition hover:opacity-90" style={{ backgroundColor: primaryColor }}>Agregar Carrera</button>
+                    </div>
+
+                    {/* FORMULARIO 2: AGREGAR NUEVA MATERIA */}
+                    <div className="bg-white p-6 rounded-3xl border shadow-sm space-y-4">
+                      <div className="flex items-center space-x-2 border-b pb-3">
+                        <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
+                          <BookOpen className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-base text-slate-800">Agregar Nueva Materia</h3>
+                          <p className="text-xs text-slate-500">Asocia materias al pensum y tutores disponibles.</p>
+                        </div>
+                      </div>
+
+                      <form onSubmit={handleAddAdminSubject} className="space-y-3.5">
+                        <div>
+                          <label className="block text-xs font-bold uppercase text-slate-600 mb-1.5">Nombre de la Materia</label>
+                          <input
+                            type="text"
+                            placeholder="Ej. Algoritmos y Estructuras de Datos"
+                            value={newAdminSubName}
+                            onChange={e => setNewAdminSubName(e.target.value)}
+                            className="w-full p-3 border rounded-xl text-sm"
+                            required
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold uppercase text-slate-600 mb-1.5">Carrera Disponible</label>
+                          <select
+                            value={newAdminSubCareer}
+                            onChange={e => setNewAdminSubCareer(e.target.value)}
+                            className="w-full p-3 border rounded-xl text-sm bg-white font-medium text-slate-700"
+                          >
+                            {careers.map(c => <option key={c.id} value={c.name}>{c.name} ({c.code})</option>)}
+                          </select>
+                        </div>
+
+                        <div>
+                          <div className="flex justify-between items-center mb-1.5">
+                            <label className="block text-xs font-bold uppercase text-slate-600">Semestre Disponible</label>
+                            <button
+                              type="button"
+                              onClick={() => setShowSemesterConfig(prev => !prev)}
+                              className="text-[11px] text-blue-600 font-bold hover:underline flex items-center space-x-1"
+                            >
+                              <span>{showSemesterConfig ? 'Ocultar ajuste' : '⚙️ Configurar (1 a 6)'}</span>
+                            </button>
+                          </div>
+
+                          {showSemesterConfig && (
+                            <div className="p-3 mb-2.5 bg-slate-50 border rounded-xl text-xs space-y-2">
+                              <span className="font-bold text-slate-700 block">Duración del Pensum ({newAdminSubCareer}):</span>
+                              <div className="flex items-center gap-1.5">
+                                {[1, 2, 3, 4, 5, 6].map(num => (
+                                  <button
+                                    key={num}
+                                    type="button"
+                                    onClick={() => {
+                                      setCareerSemestersConfig(prev => {
+                                        const updated = { ...prev, [newAdminSubCareer]: num };
+                                        try { localStorage.setItem('aura_career_semesters', JSON.stringify(updated)); } catch (e) {}
+                                        return updated;
+                                      });
+                                      if (newAdminSubSemester > num) setNewAdminSubSemester(num);
+                                      showToast(`Pensum de ${newAdminSubCareer} ajustado a ${num} semestres`);
+                                    }}
+                                    className={`w-8 h-8 rounded-lg font-black text-xs transition ${
+                                      (careerSemestersConfig[newAdminSubCareer] || 6) >= num
+                                        ? 'bg-blue-600 text-white shadow-xs'
+                                        : 'bg-white border text-slate-400 hover:bg-slate-100'
+                                    }`}
+                                    title={`Semestre ${num}`}
+                                  >
+                                    {num}
+                                  </button>
+                                ))}
+                              </div>
+                              <p className="text-[10px] text-slate-500">Haz clic para establecer hasta qué semestre abarca esta carrera (1 a 6).</p>
+                            </div>
+                          )}
+
+                          <select
+                            value={newAdminSubSemester}
+                            onChange={e => setNewAdminSubSemester(Number(e.target.value))}
+                            className="w-full p-3 border rounded-xl text-sm bg-white font-medium text-slate-700"
+                          >
+                            {Array.from({ length: careerSemestersConfig[newAdminSubCareer] || 6 }, (_, idx) => idx + 1).map(num => (
+                              <option key={num} value={num}>Semestre {num}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold uppercase text-slate-600 mb-1.5 flex justify-between items-center">
+                            <span>Tutores Disponibles para Impartirla</span>
+                            <span className="text-[10px] text-blue-600 font-bold">
+                              {newAdminSubSelectedTutorIds.length} seleccionado(s)
+                            </span>
+                          </label>
+                          <div className="border border-slate-200 rounded-xl p-2.5 max-h-40 overflow-y-auto bg-slate-50 space-y-1.5">
+                            {users.filter(u => u.role === 'tutor').length === 0 ? (
+                              <p className="text-xs text-slate-400 italic py-2 text-center">No hay tutores registrados en el sistema</p>
+                            ) : (
+                              users.filter(u => u.role === 'tutor').map(tut => {
+                                const isSelected = newAdminSubSelectedTutorIds.includes(tut.id);
+                                return (
+                                  <div
+                                    key={tut.id}
+                                    onClick={() => {
+                                      setNewAdminSubSelectedTutorIds(prev =>
+                                        isSelected ? prev.filter(id => id !== tut.id) : [...prev, tut.id]
+                                      );
+                                    }}
+                                    className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition text-xs ${
+                                      isSelected ? 'bg-blue-100 text-blue-900 border border-blue-300 font-bold' : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-100'
+                                    }`}
+                                  >
+                                    <div className="flex items-center space-x-2 truncate">
+                                      <input
+                                        type="checkbox"
+                                        checked={isSelected}
+                                        onChange={() => {}}
+                                        className="w-3.5 h-3.5 rounded text-blue-600 cursor-pointer pointer-events-none"
+                                      />
+                                      <span className="truncate">{tut.name}</span>
+                                    </div>
+                                    <span className="text-[10px] text-slate-500 shrink-0 ml-1">
+                                      {tut.career || 'Tutor'}
+                                    </span>
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-400 mt-1">Opcional: asigna uno o varios tutores a esta materia de inmediato.</p>
+                        </div>
+
+                        <button
+                          type="submit"
+                          className="w-full text-white font-bold py-3 rounded-xl text-sm shadow-md transition hover:opacity-90 flex items-center justify-center space-x-2 bg-emerald-600 hover:bg-emerald-700"
+                        >
+                          <BookOpen className="w-4 h-4" />
+                          <span>Agregar Materia al Pensum</span>
+                        </button>
+                      </form>
                     </div>
                   </div>
                 </div>
@@ -3378,6 +4179,52 @@ export default function App() {
           </div>
         </div>
       )}
+    
+      {/* MODAL ELIMINAR CARRERA */}
+      {showDeleteCareerModal && careerToDelete && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl space-y-4.5">
+            <div className="flex items-center space-x-3 text-red-600 border-b pb-3">
+              <div className="p-2 rounded-xl bg-red-50">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-black text-lg text-slate-900">¿Eliminar Carrera?</h3>
+                <p className="text-xs text-slate-500">Esta acción eliminará la carrera de Supabase.</p>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-1.5 text-xs text-slate-700">
+              <p><strong className="text-slate-900">Carrera:</strong> {careerToDelete.name}</p>
+              <p><strong className="text-slate-900">Código:</strong> {careerToDelete.code}</p>
+              <p className="text-slate-500 text-[11px] pt-1">
+                Las materias asociadas a esta carrera serán desvinculadas del catálogo académico.
+              </p>
+            </div>
+
+            <div className="flex gap-2.5 pt-1">
+              <button
+                type="button"
+                disabled={deletingCareerSubmitting}
+                onClick={() => { setShowDeleteCareerModal(false); setCareerToDelete(null); }}
+                className="w-1/2 bg-slate-100 hover:bg-slate-200 font-bold py-3 rounded-xl text-sm text-slate-800 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={deletingCareerSubmitting}
+                onClick={handleDeleteCareerConfirm}
+                className="w-1/2 bg-red-600 hover:bg-red-700 font-bold py-3 rounded-xl text-sm text-white shadow-md transition flex items-center justify-center space-x-1.5 disabled:opacity-50"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>{deletingCareerSubmitting ? 'Eliminando...' : 'Eliminar Carrera'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
