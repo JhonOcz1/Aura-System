@@ -1,3 +1,4 @@
+import auraLogo from './icons.png';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   LogOut, User, BookOpen, Settings, AlertCircle, Eye, EyeOff,
@@ -609,6 +610,12 @@ export default function App() {
   const [newAdminSubSemester, setNewAdminSubSemester] = useState(1);
   const [newAdminSubSelectedTutorIds, setNewAdminSubSelectedTutorIds] = useState([]);
   const [showSemesterConfig, setShowSemesterConfig] = useState(false);
+  // Estados para Asignación de Tutores a Materias del Pensum (Panel Principal Admin)
+  const [adminAssignTutorId, setAdminAssignTutorId] = useState('');
+  const [adminAssignSubjectName, setAdminAssignSubjectName] = useState('');
+  const [adminAssignDay, setAdminAssignDay] = useState('Lunes a Viernes');
+  const [adminAssignTime, setAdminAssignTime] = useState('Horario coordinable');
+
 
 
   const showToast = (message, type = 'success') => {
@@ -1634,7 +1641,7 @@ export default function App() {
       career: careerName,
       semester: semesterNum,
       name: subName,
-      tutorIds: [...newAdminSubSelectedTutorIds]
+      tutorIds: []
     };
 
     const updatedCatalog = [...catalogSubjects, newSubjectObj];
@@ -1643,39 +1650,130 @@ export default function App() {
       localStorage.setItem('aura_catalog_subjects', JSON.stringify(updatedCatalog));
     } catch (err) {}
 
-    let assignedCount = 0;
-    for (const tutorId of newAdminSubSelectedTutorIds) {
-      const tutor = users.find(u => u.id === tutorId);
-      if (tutor) {
-        const currentDetailed = Array.isArray(tutor.subjectsDetailed) ? tutor.subjectsDetailed : [];
-        const newDetailed = [...currentDetailed, {
-          id: `sd_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
-          name: subName,
-          career: careerName,
-          semester: semesterNum,
-          day: 'Lunes a Viernes',
-          time: 'Horario coordinable'
-        }];
-        const updatedSubjectNames = Array.from(new Set([...(tutor.subjects || []), subName]));
-        const updatedTutorObj = {
-          ...tutor,
-          subjects: updatedSubjectNames,
-          subjectsDetailed: newDetailed
-        };
-        await updateUserInDB(updatedTutorObj);
-        assignedCount++;
-      }
-    }
-
     await logAudit(
       currentUser.name,
       'MATERIA AÑADIDA',
-      `Se añadió la materia "${subName}" a ${careerName} (Semestre ${semesterNum}) con ${assignedCount} tutor(es) asignado(s).`
+      `Se añadió la materia "${subName}" al pensum de ${careerName} (Semestre ${semesterNum}).`
     );
 
-    showToast(`Materia "${subName}" agregada con éxito al catálogo institucional.`);
+    showToast(`Materia "${subName}" agregada con éxito al pensum de ${careerName}.`);
     setNewAdminSubName('');
-    setNewAdminSubSelectedTutorIds([]);
+  };
+
+  // Función para asignar tutor a materia en su carrera correspondiente (Panel Principal)
+  const handleAdminAssignTutorToSubject = async (e) => {
+    if (e) e.preventDefault();
+    const tutor = users.find(u => u.id === adminAssignTutorId);
+    if (!tutor) {
+      showToast('Selecciona un tutor académico válido', 'danger');
+      return;
+    }
+
+    const availableForTutor = catalogSubjects.filter(
+      s => s.career?.toLowerCase() === tutor.career?.toLowerCase()
+    );
+    const targetSubject = availableForTutor.find(s => s.name === adminAssignSubjectName) || availableForTutor[0];
+    if (!targetSubject) {
+      showToast(`No hay materias disponibles en el pensum para la carrera de ${tutor.career}`, 'danger');
+      return;
+    }
+
+    // Regla estricta: sólo materias de su carrera
+    if (targetSubject.career.toLowerCase() !== tutor.career.toLowerCase()) {
+      showToast(`Acción no permitida: el tutor es de ${tutor.career} y no puede impartir materias de ${targetSubject.career}.`, 'danger');
+      return;
+    }
+
+    const alreadyHas = (tutor.subjectsDetailed || []).some(
+      sd => sd.name.toLowerCase() === targetSubject.name.toLowerCase()
+    );
+    if (alreadyHas) {
+      showToast(`El tutor ${tutor.name} ya tiene asignada la materia "${targetSubject.name}".`, 'warning');
+      return;
+    }
+
+    const newDetailedItem = {
+      id: `sd_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      name: targetSubject.name,
+      career: tutor.career,
+      semester: targetSubject.semester || 1,
+      day: adminAssignDay || 'Lunes a Viernes',
+      time: adminAssignTime || 'Horario coordinable'
+    };
+
+    const updatedDetailed = [...(tutor.subjectsDetailed || []), newDetailedItem];
+    const updatedSubjectsNames = Array.from(new Set([...(tutor.subjects || []), targetSubject.name]));
+
+    const updatedTutorObj = {
+      ...tutor,
+      subjects: updatedSubjectsNames,
+      subjectsDetailed: updatedDetailed
+    };
+
+    const ok = await updateUserInDB(updatedTutorObj);
+    if (!ok) {
+      showToast('Error al guardar la asignación en la base de datos', 'danger');
+      return;
+    }
+
+    // Actualizar también la lista de tutorIds en catalogSubjects
+    setCatalogSubjects(prev => {
+      const next = prev.map(s => {
+        if (s.name.toLowerCase() === targetSubject.name.toLowerCase() && s.career.toLowerCase() === tutor.career.toLowerCase()) {
+          const tIds = s.tutorIds || [];
+          if (!tIds.includes(tutor.id)) {
+            return { ...s, tutorIds: [...tIds, tutor.id] };
+          }
+        }
+        return s;
+      });
+      try { localStorage.setItem('aura_catalog_subjects', JSON.stringify(next)); } catch (e) {}
+      return next;
+    });
+
+    await logAudit(
+      currentUser.name,
+      'ASIGNACIÓN DE TUTOR',
+      `Se asignó al tutor ${tutor.name} a la materia "${targetSubject.name}" (${tutor.career} - Semestre ${targetSubject.semester || 1}).`
+    );
+
+    showToast(`¡Tutor ${tutor.name} asignado exitosamente a ${targetSubject.name}!`);
+  };
+
+  const handleAdminUnassignTutorSubject = async (tutorId, subjectName) => {
+    const tutor = users.find(u => u.id === tutorId);
+    if (!tutor) return;
+    if (!window.confirm(`¿Desvincular la materia "${subjectName}" del tutor ${tutor.name}?`)) return;
+
+    const updatedDetailed = (tutor.subjectsDetailed || []).filter(sd => sd.name.toLowerCase() !== subjectName.toLowerCase());
+    const updatedSubjects = (tutor.subjects || []).filter(s => s.toLowerCase() !== subjectName.toLowerCase());
+
+    const updatedTutorObj = {
+      ...tutor,
+      subjects: updatedSubjects,
+      subjectsDetailed: updatedDetailed
+    };
+
+    const ok = await updateUserInDB(updatedTutorObj);
+    if (ok) {
+      setCatalogSubjects(prev => {
+        const next = prev.map(s => {
+          if (s.name.toLowerCase() === subjectName.toLowerCase() && s.tutorIds?.includes(tutorId)) {
+            return { ...s, tutorIds: s.tutorIds.filter(id => id !== tutorId) };
+          }
+          return s;
+        });
+        try { localStorage.setItem('aura_catalog_subjects', JSON.stringify(next)); } catch (e) {}
+        return next;
+      });
+
+      await logAudit(
+        currentUser.name,
+        'DESVINCULACIÓN DE TUTOR',
+        `Se desvinculó al tutor ${tutor.name} de la materia "${subjectName}".`
+      );
+      showToast(`Materia "${subjectName}" desvinculada del tutor.`);
+    }
   };
 
   const handleDeleteSubjectFromCatalog = async (subjectId, subjectName, careerName) => {
@@ -1974,7 +2072,7 @@ export default function App() {
           {/* SECCIÓN DEL LOGO Y TÍTULO */}
           <div className="flex items-center space-x-2 cursor-pointer min-w-0 flex-grow" onClick={() => currentUser && setActiveTab('dashboard')}>
             <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center overflow-hidden shadow-lg bg-white p-1 shrink-0">
-              <img src={`${import.meta.env.BASE_URL}icons.png`} alt="Logo AURA" className="w-full h-full object-contain" />
+              <img src={auraLogo} alt="Logo AURA" className="w-full h-full object-contain" />
             </div>
             <div className="flex flex-col min-w-0">
               <span className="font-extrabold text-xs sm:text-base tracking-tight text-white leading-tight truncate">
@@ -2073,9 +2171,311 @@ export default function App() {
 
             {activeTab === 'dashboard' && (
               <div className="space-y-6">
-                <div className="text-white p-6 sm:p-8 rounded-3xl shadow-xl transition-all duration-300" style={{ background: `linear-gradient(to right, ${primaryColor}, #0f172a)` }}>
-                  <h1 className="text-2xl sm:text-4xl font-black">¡Hola, {currentUser.role === 'admin' ? 'Admin Global' : currentUser.name}!</h1>
+                {/* BANNER PRINCIPAL */}
+                <div className="text-white p-6 sm:p-8 rounded-3xl shadow-xl transition-all duration-300 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4" style={{ background: `linear-gradient(to right, ${primaryColor}, #0f172a)` }}>
+                  <div>
+                    <h1 className="text-2xl sm:text-4xl font-black">¡Hola, {currentUser.role === 'admin' ? 'Admin Global' : currentUser.name}!</h1>
+                    <p className="text-white/80 text-sm mt-1">
+                      {currentUser.role === 'admin' 
+                        ? 'Panel Central de Control: visualización de tutorías activas y asignación de tutores a materias de su pensum.'
+                        : 'Bienvenido a tu plataforma académica AURA Estudiantil.'}
+                    </p>
+                  </div>
+                  <div className="bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-white/20 self-start sm:self-auto text-xs font-semibold">
+                    <span>Zona Horaria: Venezuela (UTC-4)</span>
+                  </div>
                 </div>
+
+                {/* SI ES ADMINISTRADOR: VISTA DIVIDIDA (TUTORÍAS ACTIVAS A LA IZQUIERDA Y ASIGNACIÓN A LA DERECHA) */}
+                {currentUser.role === 'admin' && (() => {
+                  const activeSessions = (sessions || []).filter(s => s.status === 'confirmed' || s.status === 'pending');
+                  const activeTutors = (users || []).filter(u => u.role === 'tutor');
+                  
+                  // Tutor seleccionado actualmente en el formulario de asignación
+                  const currentSelectedTutor = activeTutors.find(u => u.id === adminAssignTutorId) || activeTutors[0];
+                  const tutorCareer = currentSelectedTutor?.career || '';
+                  
+                  // Materias que pertenecen EXCLUSIVAMENTE a la carrera del tutor
+                  const subjectsForTutorCareer = catalogSubjects.filter(
+                    s => s.career?.toLowerCase() === tutorCareer.toLowerCase()
+                  ).sort((a, b) => (a.semester || 1) - (b.semester || 1) || a.name.localeCompare(b.name));
+
+                  const currentSelectedSubject = subjectsForTutorCareer.find(s => s.name === adminAssignSubjectName) || subjectsForTutorCareer[0];
+
+                  return (
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                      {/* LADO IZQUIERDO (COL-SPAN-7): VISTA DE TUTORÍAS ACTIVAS */}
+                      <div className="lg:col-span-7 bg-white p-6 rounded-3xl border shadow-sm space-y-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b gap-2">
+                          <div className="flex items-center space-x-2.5">
+                            <div className="p-2 rounded-xl bg-blue-50 text-blue-600">
+                              <Activity className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <h3 className="font-black text-lg text-slate-800">Tutorías Activas</h3>
+                              <p className="text-xs text-slate-500">Sesiones programadas y solicitudes en curso del sistema</p>
+                            </div>
+                          </div>
+                          <span className="self-start sm:self-auto px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
+                            {activeSessions.length} Activa(s)
+                          </span>
+                        </div>
+
+                        {activeSessions.length > 0 ? (
+                          <div className="space-y-3.5 max-h-[620px] overflow-y-auto pr-1">
+                            {activeSessions.map(session => {
+                              // Tutor académico asignado
+                              const tutorObj = users.find(u => u.id === session.tutorId);
+                              const tutorName = tutorObj?.name || session.tutorName || 'Tutor Académico';
+                              
+                              // Carrera: obtener del tutor o del catálogo
+                              const catalogMatch = catalogSubjects.find(cs => cs.name?.toLowerCase() === session.subject?.toLowerCase());
+                              const careerName = catalogMatch?.career || tutorObj?.career || 'General';
+                              
+                              // Semestre del pensum
+                              const semesterNum = catalogMatch?.semester || 
+                                tutorObj?.subjectsDetailed?.find(sd => sd.name?.toLowerCase() === session.subject?.toLowerCase())?.semester || 1;
+
+                              const isConfirmed = session.status === 'confirmed';
+
+                              return (
+                                <div
+                                  key={session.id}
+                                  className="p-4.5 rounded-2xl border border-slate-200 bg-slate-50/70 hover:bg-slate-50 transition space-y-3 shadow-xs"
+                                >
+                                  {/* Encabezado de la tutoría activa */}
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div>
+                                      <h4 className="font-black text-base text-slate-900 leading-snug">{session.subject}</h4>
+                                      <p className="text-xs text-slate-500 font-medium">Estudiante: <strong className="text-slate-700">{session.studentName}</strong></p>
+                                    </div>
+                                    <span className={`px-2.5 py-1 rounded-xl text-[11px] font-black uppercase tracking-wider shrink-0 ${
+                                      isConfirmed ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-amber-100 text-amber-800 border border-amber-200'
+                                    }`}>
+                                      {isConfirmed ? 'Confirmada' : 'Pendiente'}
+                                    </span>
+                                  </div>
+
+                                  {/* Información requerida: Tutor Académico, Carrera, Semestre */}
+                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2 border-t border-slate-200/70 text-xs">
+                                    <div className="flex items-center space-x-2 bg-white p-2.5 rounded-xl border border-slate-200/60">
+                                      <User className="w-4 h-4 text-blue-600 shrink-0" />
+                                      <div className="truncate">
+                                        <span className="text-[10px] font-bold uppercase text-slate-400 block">Tutor Académico</span>
+                                        <span className="font-bold text-slate-800 truncate block">{tutorName}</span>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-center space-x-2 bg-white p-2.5 rounded-xl border border-slate-200/60">
+                                      <BookOpen className="w-4 h-4 text-purple-600 shrink-0" />
+                                      <div className="truncate">
+                                        <span className="text-[10px] font-bold uppercase text-slate-400 block">Carrera</span>
+                                        <span className="font-bold text-slate-800 truncate block">{careerName}</span>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-center space-x-2 bg-white p-2.5 rounded-xl border border-slate-200/60">
+                                      <Layers className="w-4 h-4 text-emerald-600 shrink-0" />
+                                      <div className="truncate">
+                                        <span className="text-[10px] font-bold uppercase text-slate-400 block">Semestre Pensum</span>
+                                        <span className="font-bold text-slate-800 block">Semestre {semesterNum}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Horario y Fecha */}
+                                  <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
+                                    <div className="flex items-center space-x-1.5">
+                                      <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                                      <span>Fecha: <strong className="text-slate-700">{session.date || 'Por acordar'}</strong></span>
+                                    </div>
+                                    <div className="flex items-center space-x-1.5">
+                                      <Clock className="w-3.5 h-3.5 text-slate-400" />
+                                      <span>Hora: <strong className="text-slate-700">{session.time || 'Coordinable'}</strong></span>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="text-center py-12 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50 space-y-2.5">
+                            <Activity className="w-10 h-10 text-slate-300 mx-auto" />
+                            <p className="text-sm font-bold text-slate-600">No hay tutorías activas en este momento</p>
+                            <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                              Las solicitudes de los estudiantes y las sesiones confirmadas se listarán automáticamente en este panel.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* LADO DERECHO (COL-SPAN-5): FORMULARIO PARA ASIGNAR TUTOR A MATERIA */}
+                      <div className="lg:col-span-5 bg-white p-6 rounded-3xl border shadow-sm space-y-4">
+                        <div className="flex items-center space-x-2.5 border-b pb-3">
+                          <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
+                            <UserCheck className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h3 className="font-black text-lg text-slate-800">Asignar Tutor a Materia</h3>
+                            <p className="text-xs text-slate-500">Asocia tutores a las materias de su carrera</p>
+                          </div>
+                        </div>
+
+                        {activeTutors.length === 0 ? (
+                          <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-800 space-y-1">
+                            <p className="font-bold">No hay tutores registrados en el sistema.</p>
+                            <p>Crea o importa tutores en el módulo de Gestión de Usuarios para poder asignarles materias.</p>
+                          </div>
+                        ) : (
+                          <form onSubmit={handleAdminAssignTutorToSubject} className="space-y-4">
+                            {/* 1. Seleccionar Tutor */}
+                            <div>
+                              <label className="block text-xs font-bold uppercase text-slate-600 mb-1.5">
+                                Seleccionar Tutor Académico
+                              </label>
+                              <select
+                                value={currentSelectedTutor?.id || ''}
+                                onChange={(e) => {
+                                  setAdminAssignTutorId(e.target.value);
+                                  const tut = activeTutors.find(u => u.id === e.target.value);
+                                  if (tut) {
+                                    const subs = catalogSubjects.filter(s => s.career?.toLowerCase() === tut.career?.toLowerCase());
+                                    if (subs.length > 0) setAdminAssignSubjectName(subs[0].name);
+                                    else setAdminAssignSubjectName('');
+                                  }
+                                }}
+                                className="w-full p-3 border rounded-xl text-sm bg-white font-medium text-slate-700"
+                                required
+                              >
+                                {activeTutors.map(t => (
+                                  <option key={t.id} value={t.id}>
+                                    {t.name} — {t.career || 'Sin Carrera'}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            {/* Badge informativo de Carrera */}
+                            <div className="p-3 bg-blue-50 border border-blue-200/80 rounded-xl flex items-center justify-between text-xs">
+                              <div>
+                                <span className="text-[10px] font-bold uppercase text-blue-600 block">Carrera del Tutor:</span>
+                                <span className="font-black text-blue-950 text-sm">{tutorCareer || 'No asignada'}</span>
+                              </div>
+                              <span className="text-[10px] text-blue-700 bg-white border border-blue-200 px-2 py-0.5 rounded-md font-semibold">
+                                Pensum estricto
+                              </span>
+                            </div>
+
+                            {/* 2. Seleccionar Materia del Pensum correspondiente */}
+                            <div>
+                              <div className="flex justify-between items-center mb-1.5">
+                                <label className="block text-xs font-bold uppercase text-slate-600">
+                                  Materia del Pensum ({tutorCareer})
+                                </label>
+                                <span className="text-[10px] text-slate-400 font-semibold">
+                                  {subjectsForTutorCareer.length} disponibles
+                                </span>
+                              </div>
+
+                              {subjectsForTutorCareer.length > 0 ? (
+                                <select
+                                  value={currentSelectedSubject?.name || ''}
+                                  onChange={(e) => setAdminAssignSubjectName(e.target.value)}
+                                  className="w-full p-3 border rounded-xl text-sm bg-white font-bold text-slate-800"
+                                  required
+                                >
+                                  {subjectsForTutorCareer.map(sub => (
+                                    <option key={sub.id} value={sub.name}>
+                                      {sub.name} (Semestre {sub.semester || 1})
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700">
+                                  No hay materias registradas en el catálogo para la carrera {tutorCareer}. Ve a <strong>RFADM02 - Catálogo Académico</strong> para agregarlas.
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Semestre de la materia */}
+                            {currentSelectedSubject && (
+                              <div className="flex items-center space-x-2 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-200/60">
+                                <Layers className="w-4 h-4 text-slate-400 shrink-0" />
+                                <span>Semestre asignado en pensum: <strong className="text-slate-900 font-bold">Semestre {currentSelectedSubject.semester || 1}</strong></span>
+                              </div>
+                            )}
+
+                            {/* Días y Horarios */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                              <div>
+                                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Días Disponibles</label>
+                                <input
+                                  type="text"
+                                  placeholder="Ej. Lunes a Viernes"
+                                  value={adminAssignDay}
+                                  onChange={e => setAdminAssignDay(e.target.value)}
+                                  className="w-full p-2.5 border rounded-xl text-xs"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Horario Coordinable</label>
+                                <input
+                                  type="text"
+                                  placeholder="Ej. 08:00 AM - 12:00 PM"
+                                  value={adminAssignTime}
+                                  onChange={e => setAdminAssignTime(e.target.value)}
+                                  className="w-full p-2.5 border rounded-xl text-xs"
+                                />
+                              </div>
+                            </div>
+
+                            <button
+                              type="submit"
+                              disabled={subjectsForTutorCareer.length === 0}
+                              className="w-full text-white font-bold py-3 rounded-xl text-sm shadow-md transition hover:opacity-90 flex items-center justify-center space-x-2 disabled:opacity-50"
+                              style={{ backgroundColor: primaryColor }}
+                            >
+                              <UserCheck className="w-4 h-4" />
+                              <span>Asignar Tutor a Materia</span>
+                            </button>
+                          </form>
+                        )}
+
+                        {/* LISTADO DE MATERIAS YA ASIGNADAS A ESTE TUTOR */}
+                        {currentSelectedTutor && (
+                          <div className="pt-3 border-t border-slate-200 space-y-2">
+                            <span className="text-xs font-extrabold uppercase tracking-wider text-slate-600 block">
+                              Materias impartidas por {currentSelectedTutor.name}:
+                            </span>
+                            {(currentSelectedTutor.subjectsDetailed || []).length > 0 ? (
+                              <div className="flex flex-wrap gap-1.5">
+                                {(currentSelectedTutor.subjectsDetailed || []).map(sd => (
+                                  <div
+                                    key={sd.id || sd.name}
+                                    className="inline-flex items-center space-x-1.5 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 border rounded-lg text-xs font-medium text-slate-800 transition"
+                                  >
+                                    <span>{sd.name}</span>
+                                    <span className="text-[10px] text-slate-500 font-bold">(Sem {sd.semester || 1})</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleAdminUnassignTutorSubject(currentSelectedTutor.id, sd.name)}
+                                      className="text-slate-400 hover:text-red-600 ml-1"
+                                      title="Desvincular materia"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-slate-400 italic">Este tutor aún no tiene materias asignadas.</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
@@ -2702,50 +3102,7 @@ export default function App() {
                           </select>
                         </div>
 
-                        <div>
-                          <label className="block text-xs font-bold uppercase text-slate-600 mb-1.5 flex justify-between items-center">
-                            <span>Tutores Disponibles para Impartirla</span>
-                            <span className="text-[10px] text-blue-600 font-bold">
-                              {newAdminSubSelectedTutorIds.length} seleccionado(s)
-                            </span>
-                          </label>
-                          <div className="border border-slate-200 rounded-xl p-2.5 max-h-40 overflow-y-auto bg-slate-50 space-y-1.5">
-                            {users.filter(u => u.role === 'tutor').length === 0 ? (
-                              <p className="text-xs text-slate-400 italic py-2 text-center">No hay tutores registrados en el sistema</p>
-                            ) : (
-                              users.filter(u => u.role === 'tutor').map(tut => {
-                                const isSelected = newAdminSubSelectedTutorIds.includes(tut.id);
-                                return (
-                                  <div
-                                    key={tut.id}
-                                    onClick={() => {
-                                      setNewAdminSubSelectedTutorIds(prev =>
-                                        isSelected ? prev.filter(id => id !== tut.id) : [...prev, tut.id]
-                                      );
-                                    }}
-                                    className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition text-xs ${
-                                      isSelected ? 'bg-blue-100 text-blue-900 border border-blue-300 font-bold' : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-100'
-                                    }`}
-                                  >
-                                    <div className="flex items-center space-x-2 truncate">
-                                      <input
-                                        type="checkbox"
-                                        checked={isSelected}
-                                        onChange={() => {}}
-                                        className="w-3.5 h-3.5 rounded text-blue-600 cursor-pointer pointer-events-none"
-                                      />
-                                      <span className="truncate">{tut.name}</span>
-                                    </div>
-                                    <span className="text-[10px] text-slate-500 shrink-0 ml-1">
-                                      {tut.career || 'Tutor'}
-                                    </span>
-                                  </div>
-                                );
-                              })
-                            )}
-                          </div>
-                          <p className="text-[11px] text-slate-400 mt-1">Opcional: asigna uno o varios tutores a esta materia de inmediato.</p>
-                        </div>
+
 
                         <button
                           type="submit"
@@ -3580,7 +3937,7 @@ export default function App() {
               <div className="bg-white p-8 sm:p-10 rounded-3xl shadow-xl border border-slate-200 space-y-6">
                 <div className="text-center space-y-2">
                   <div className="w-16 h-16 bg-white rounded-2xl shadow-md p-1.5 flex items-center justify-center mx-auto mb-4 border border-slate-100">
-                    <img src={`${import.meta.env.BASE_URL}icons.png`} alt="Logo Central AURA" className="w-full h-full object-contain" />
+                    <img src={auraLogo} alt="Logo Central AURA" className="w-full h-full object-contain" />
                   </div>
                   <h2 className="text-2xl font-black text-slate-800">AURA Estudiantil</h2>
                   <p className="text-sm text-slate-500">Instituto Universitario Jesús Obrero</p>
