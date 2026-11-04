@@ -708,8 +708,15 @@ export default function App() {
       try {
         const { data: subDB } = await supabase.from('subjects').select('*');
         if (subDB && subDB.length > 0) {
-          setCatalogSubjects(subDB);
-          try { localStorage.setItem('aura_catalog_subjects', JSON.stringify(subDB)); } catch (e) {}
+          const mappedSubs = subDB.map(s => ({
+            id: s.id,
+            career: s.career,
+            semester: s.semester || 1,
+            name: s.name,
+            tutorIds: Array.isArray(s.tutor_ids) ? s.tutor_ids : []
+          }));
+          setCatalogSubjects(mappedSubs);
+          try { localStorage.setItem('aura_catalog_subjects', JSON.stringify(mappedSubs)); } catch (e) {}
         }
       } catch (e) {}
 
@@ -1681,6 +1688,9 @@ export default function App() {
       }
       setCareers(prev => prev.filter(c => c.id !== careerToDelete.id));
       setCatalogSubjects(prev => prev.filter(s => s.career.toLowerCase() !== careerToDelete.name.toLowerCase()));
+      try {
+        await supabase.from('subjects').delete().eq('career', careerToDelete.name);
+      } catch (err) {}
       await logAudit(
         currentUser.name,
         'CARRERA ELIMINADA',
@@ -1879,6 +1889,15 @@ export default function App() {
         setCatalogSubjects(updatedCatalog);
         try {
           localStorage.setItem('aura_catalog_subjects', JSON.stringify(updatedCatalog));
+          // Sincronizar materias importadas en Supabase
+          const subjectsToUpsert = updatedCatalog.map(s => ({
+            id: s.id,
+            career: s.career,
+            semester: s.semester || 1,
+            name: s.name,
+            tutor_ids: s.tutorIds || []
+          }));
+          await supabase.from('subjects').upsert(subjectsToUpsert);
         } catch (e) {}
 
         for (const tut of tutorsToUpdate.values()) {
@@ -1920,13 +1939,35 @@ export default function App() {
       return;
     }
 
+    const newSubId = `sub_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
     const newSubjectObj = {
-      id: `sub_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      id: newSubId,
       career: careerName,
       semester: semesterNum,
       name: subName,
       tutorIds: []
     };
+
+    // Inserción directa en la base de datos Supabase
+    try {
+      const dbPayload = {
+        id: newSubId,
+        career: careerName,
+        semester: semesterNum,
+        name: subName,
+        tutor_ids: []
+      };
+      const { error } = await supabase.from('subjects').insert([dbPayload]);
+      if (error) {
+        console.error('Error insertando materia en Supabase:', error);
+        showToast('Error al guardar materia en la base de datos: ' + error.message, 'danger');
+        return;
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Error de conexión con la base de datos', 'danger');
+      return;
+    }
 
     const updatedCatalog = [...catalogSubjects, newSubjectObj];
     setCatalogSubjects(updatedCatalog);
@@ -1940,7 +1981,7 @@ export default function App() {
       `Se añadió la materia "${subName}" al pensum de ${careerName} (Semestre ${semesterNum}).`
     );
 
-    showToast(`Materia "${subName}" agregada con éxito al pensum de ${careerName}.`);
+    showToast(`Materia "${subName}" agregada y guardada con éxito en la base de datos.`);
     setNewAdminSubName('');
   };
 
@@ -2064,6 +2105,18 @@ export default function App() {
     if (!window.confirm(`¿Estás seguro de que deseas eliminar la materia "${subjectName}" del pensum de ${careerName}?`)) {
       return;
     }
+
+    try {
+      const { error } = await supabase.from('subjects').delete().eq('id', subjectId);
+      if (error) {
+        console.error('Error eliminando materia de Supabase:', error);
+        showToast('Error al eliminar de la base de datos: ' + error.message, 'danger');
+        return;
+      }
+    } catch (err) {
+      console.error(err);
+    }
+
     const updatedCatalog = catalogSubjects.filter(s => s.id !== subjectId && !(s.name === subjectName && s.career === careerName));
     setCatalogSubjects(updatedCatalog);
     try {
@@ -2075,7 +2128,7 @@ export default function App() {
       'MATERIA ELIMINADA',
       `Se eliminó la materia "${subjectName}" del catálogo de ${careerName}.`
     );
-    showToast(`Materia "${subjectName}" eliminada del catálogo.`);
+    showToast(`Materia "${subjectName}" eliminada del catálogo y de la base de datos.`);
   };
 
   const exportDataToCSV = (filename, dataArray) => {

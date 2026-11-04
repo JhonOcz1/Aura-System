@@ -133,3 +133,4 @@ INSERT INTO public.subjects (id, career, semester, name) VALUES
 ('sub_edpr_5', 'Educación Primaria', 5, 'Inclusión Escolar y Currículo de Primaria'),
 ('sub_edpr_6', 'Educación Primaria', 6, 'Investigación y Práctica Docente Integral')
 ON CONFLICT (id) DO NOTHING;
+
