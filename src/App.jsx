@@ -529,7 +529,30 @@ export default function App() {
     }
   });
 
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      const savedTab = localStorage.getItem('aura_active_tab');
+      return savedTab || 'dashboard';
+    } catch (e) {
+      return 'dashboard';
+    }
+  });
+
+  // Persistir la pestaña activa en recargas de página
+  useEffect(() => {
+    try {
+      if (activeTab) {
+        localStorage.setItem('aura_active_tab', activeTab);
+      }
+    } catch (e) {}
+  }, [activeTab]);
+
+  // Si un usuario no administrador tiene guardada una pestaña de admin, redirigir a dashboard
+  useEffect(() => {
+    if (currentUser && currentUser.role !== 'admin' && activeTab.startsWith('admin_')) {
+      setActiveTab('dashboard');
+    }
+  }, [currentUser, activeTab]);
   const [toast, setToast] = useState(null);
   const [authView, setAuthView] = useState('login');
   const [loginEmail, setLoginEmail] = useState('');
@@ -560,6 +583,7 @@ export default function App() {
   const [bookingDate, setBookingDate] = useState('');
   const [bookingTime, setBookingTime] = useState('');
   const [bookingSubject, setBookingSubject] = useState('');
+  const [bookingMessage, setBookingMessage] = useState('');
 
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -886,6 +910,7 @@ export default function App() {
     const userName = currentUser?.name;
     setCurrentUser(null);
     localStorage.removeItem('aura_active_user');
+    localStorage.removeItem('aura_active_tab');
     setActiveTab('dashboard');
     setShowNotificationsModal(false);
     setActiveChatSession(null);
@@ -1346,18 +1371,33 @@ export default function App() {
 
   const handleBookSession = async (e) => {
     e.preventDefault();
-    if (!bookingDate || !bookingTime || !bookingSubject) {
-      showToast('Completa todos los campos', 'danger');
+    if (!bookingSubject) {
+      showToast('Por favor selecciona la materia a solicitar', 'danger');
       return;
     }
 
-    const todayStr = getVenezuelaDateString();
-    if (bookingDate < todayStr) {
-      showToast('No puedes reservar tutorías para fechas anteriores al día de hoy.', 'danger');
-      return;
-    }
+    const finalDate = bookingDate || getVenezuelaDateString();
+    const finalTime = bookingTime || '10:00';
+    const finalDesc = (bookingMessage || '').trim() || 'Solicitud de tutoría enviada por el estudiante.';
 
     const newSessionId = `ses_${Date.now()}`;
+
+    const metaObj = {
+      __meta: true,
+      career: currentUser.career || '',
+      modality: 'Presencial',
+      location: 'Sede Central IUJO',
+      description: finalDesc
+    };
+
+    const sysMsg = {
+      id: `msg_${Date.now()}`,
+      sender: currentUser.name,
+      senderRole: 'student',
+      text: finalDesc,
+      time: getVenezuelaTimeString()
+    };
+
     const newSession = {
       id: newSessionId,
       studentId: currentUser.id,
@@ -1365,19 +1405,61 @@ export default function App() {
       tutorId: selectedTutorForBooking.id,
       tutorName: selectedTutorForBooking.name,
       subject: bookingSubject,
-      date: bookingDate,
-      time: bookingTime,
+      date: finalDate,
+      time: finalTime,
       status: 'pending',
-      chat: []
+      modality: 'Presencial',
+      location: 'Sede Central IUJO',
+      description: finalDesc,
+      career: currentUser.career || '',
+      chat: [sysMsg]
     };
 
     try {
-      const { error } = await supabase.from('sessions').insert([mapSessionToDB(newSession)]);
+      let payload = {
+        id: newSessionId,
+        student_id: currentUser.id,
+        student_name: currentUser.name,
+        tutor_id: selectedTutorForBooking.id,
+        tutor_name: selectedTutorForBooking.name,
+        subject: bookingSubject,
+        date: finalDate,
+        time: finalTime,
+        status: 'pending',
+        modality: 'Presencial',
+        location: 'Sede Central IUJO',
+        description: finalDesc,
+        chat: [metaObj, sysMsg]
+      };
+
+      let { error } = await supabase.from('sessions').insert([payload]);
+
+      if (error && error.message && (error.message.includes('column') || error.message.includes('modality') || error.message.includes('location'))) {
+        delete payload.modality;
+        delete payload.location;
+        delete payload.description;
+        const res2 = await supabase.from('sessions').insert([payload]);
+        error = res2.error;
+      }
+
       if (error) {
-        showToast('Error al guardar la tutoría en base de datos: ' + error.message, 'danger');
+        showToast('Error al registrar la tutoría en la base de datos: ' + error.message, 'danger');
         return;
       }
-      setSessions(prev => [...prev, newSession]);
+
+      try {
+        await supabase.from('messages').insert([{
+          id: sysMsg.id,
+          session_id: newSessionId,
+          sender_id: currentUser.id,
+          sender_name: currentUser.name,
+          sender_role: 'student',
+          text: sysMsg.text,
+          created_at: new Date().toISOString()
+        }]);
+      } catch (eMsg) {}
+
+      setSessions(prev => [newSession, ...prev]);
 
       const tutorId = selectedTutorForBooking.id;
       const tutorName = selectedTutorForBooking.name;
@@ -1385,19 +1467,20 @@ export default function App() {
       setBookingDate('');
       setBookingTime('');
       setBookingSubject('');
+      setBookingMessage('');
 
       await addNotification(
         tutorId,
         'Nueva Solicitud de Tutoría',
-        `${currentUser.name} solicitó una clase de ${bookingSubject}. Haz clic para revisar su perfil y responder.`,
+        `${currentUser.name} ha solicitado una tutoría de ${bookingSubject}. Mensaje: "${finalDesc.slice(0, 50)}...". Haz clic para responder.`,
         newSessionId,
         'booking_request'
       );
-      await logAudit(currentUser.name, 'RESERVA DE TUTORÍA', `Solicitud de clase de ${bookingSubject} con ${tutorName} para el ${bookingDate}`);
-      showToast('Tutoría solicitada con éxito. Estado Pendiente.');
+      await logAudit(currentUser.name, 'RESERVA DE TUTORÍA', `Solicitud de clase de ${bookingSubject} con el tutor ${tutorName} para el ${finalDate}`);
+      showToast(`¡Solicitud enviada con éxito al tutor ${tutorName}! Estado: Pendiente de aprobación.`);
     } catch (err) {
       console.error('Error guardando sesión:', err);
-      showToast('Error de conexión al reservar la tutoría', 'danger');
+      showToast('Error de conexión al reservar la tutoría: ' + err.message, 'danger');
     }
   };
 
@@ -1555,7 +1638,50 @@ export default function App() {
     }
   };
 
-  // Función para que un estudiante se inscriba en una oferta abierta de tutoría de su carrera
+  // Función para que un estudiante cancele/rechace una tutoría pendiente antes de ser aceptada
+  const handleStudentCancelPendingSession = async (session) => {
+    if (!session || !session.id) return;
+
+    try {
+      // 1. Actualizar estado local inmediatamente
+      setSessions(prev => prev.map(s => s.id === session.id ? { ...s, status: 'rejected' } : s));
+
+      // 2. Actualizar en Supabase
+      const { error } = await supabase.from('sessions').update({ status: 'rejected' }).eq('id', session.id);
+      if (error) {
+        showToast('Error al cancelar en base de datos: ' + error.message, 'danger');
+        return;
+      }
+
+      // 3. Notificar al tutor de la cancelación
+      try {
+        const notifId = `not_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+        await supabase.from('notifications').insert([{
+          id: notifId,
+          user_id: session.tutorId,
+          title: 'Solicitud Cancelada',
+          text: `El estudiante ${currentUser.name} ha cancelado su solicitud de tutoría de ${session.subject}.`,
+          session_id: session.id,
+          type: 'general',
+          time: 'Justo ahora',
+          read: false
+        }]);
+      } catch (eNotif) {}
+
+      await logAudit(
+        currentUser.name,
+        'SOLICITUD CANCELADA',
+        `El estudiante canceló la solicitud de tutoría de ${session.subject} con el tutor ${session.tutorName}`
+      );
+
+      showToast('Solicitud rechazada y cancelada exitosamente.');
+    } catch (err) {
+      console.error(err);
+      showToast('Error de conexión al cancelar la tutoría', 'danger');
+    }
+  };
+
+    // Función para que un estudiante se inscriba en una oferta abierta de tutoría de su carrera
   const handleStudentEnrollSession = async (session) => {
     try {
       const enrollMsg = {
@@ -2578,7 +2704,14 @@ export default function App() {
 
           {/* SECCIÓN DE BOTONES DE USUARIO */}
           {currentUser && (
-            <div className="flex items-center space-x-1 sm:space-x-3 shrink-0">
+            <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
+              {/* ROL EN LA BARRA SUPERIOR (ARRIBA) */}
+              <div className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-white/20 border border-white/30 text-white shadow-xs backdrop-blur-sm">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
+                <span className="text-[11px] sm:text-xs font-black uppercase tracking-wider">
+                  {currentUser.role === 'admin' ? 'Super Administrador' : currentUser.role === 'tutor' ? 'Tutor' : 'Estudiante'}
+                </span>
+              </div>
               {currentUser.role !== 'admin' && (
                 <button onClick={() => setShowNotificationsModal(true)} className="relative p-1.5 sm:p-2 text-white/90 hover:text-white hover:bg-white/10 rounded-lg transition" title="Notificaciones">
                   <Bell className="w-4.5 h-4.5 sm:w-5 sm:h-5 shrink-0" />
@@ -2613,7 +2746,8 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
         {currentUser ? (
           <div>
-            <div className="bg-white rounded-2xl p-3 mb-6 border border-slate-200 shadow-sm flex flex-wrap gap-4 items-center">
+            <div className="bg-white rounded-2xl p-3 mb-6 border border-slate-200 shadow-sm flex flex-wrap gap-3 items-center justify-between">
+              <div className="flex flex-wrap gap-3 items-center">
               <button onClick={() => setActiveTab('dashboard')} className={`px-5 py-2.5 rounded-xl text-sm font-bold transition flex items-center space-x-2.5 shrink-0 ${activeTab === 'dashboard' ? 'text-white shadow-md' : 'text-slate-700 hover:bg-slate-100'}`} style={activeTab === 'dashboard' ? { backgroundColor: primaryColor } : {}}>
                 <Activity className="w-4.5 h-4.5 shrink-0" /> <span className="whitespace-nowrap">Panel Principal</span>
               </button>
@@ -2675,6 +2809,15 @@ export default function App() {
                   <User className="w-4.5 h-4.5 shrink-0" /> <span className="whitespace-nowrap">Mi Perfil</span>
                 </button>
               )}
+              </div>
+
+              {/* ROL EN LA BARRA DE NAVEGACIÓN PRINCIPAL */}
+              <div className="ml-auto flex items-center space-x-2 px-3.5 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700 shadow-2xs">
+                <span className="text-[10px] uppercase font-extrabold text-slate-400">Rol:</span>
+                <span className="font-black text-slate-900 uppercase">
+                  {currentUser.role === 'admin' ? 'Super Administrador' : currentUser.role === 'tutor' ? 'Tutor' : 'Estudiante'}
+                </span>
+              </div>
             </div>
 
             {activeTab === 'dashboard' && (
@@ -3320,16 +3463,26 @@ export default function App() {
                                     </div>
                                   </div>
 
-                                  <button
-                                    onClick={() => {
-                                      setActiveChatSession(ses);
-                                      setActiveTab('messages');
-                                    }}
-                                    className="w-full py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition flex items-center justify-center space-x-1.5 shadow-xs"
-                                  >
-                                    <MessageCircle className="w-3.5 h-3.5" />
-                                    <span>Ir al Chat de la Tutoría</span>
-                                  </button>
+                                  {isConfirmed ? (
+                                    <button
+                                      onClick={() => {
+                                        setActiveChatSession(ses);
+                                        setActiveTab('messages');
+                                      }}
+                                      className="w-full py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition flex items-center justify-center space-x-1.5 shadow-xs"
+                                    >
+                                      <MessageCircle className="w-3.5 h-3.5" />
+                                      <span>Ir al Chat de la Tutoría</span>
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => handleStudentCancelPendingSession(ses)}
+                                      className="w-full py-2 px-3 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold text-xs transition flex items-center justify-center space-x-1.5 shadow-2xs"
+                                    >
+                                      <XCircle className="w-3.5 h-3.5 text-red-600" />
+                                      <span>Rechazar / Cancelar Solicitud</span>
+                                    </button>
+                                  )}
                                 </div>
                               );
                             })}
@@ -4676,11 +4829,7 @@ export default function App() {
                     <p className="text-sm text-slate-600">Dirección: <strong className="text-slate-900">{currentUser.address}</strong></p>
                   </div>
 
-                  {currentUser.role === 'student' && (
-                    <button onClick={handleToggleUserRole} className="px-4 py-3 rounded-xl border border-slate-300 text-sm font-bold text-slate-800 hover:bg-slate-50 transition shadow-sm">
-                      Cambiar a Tutor Docente
-                    </button>
-                  )}
+
                 </div>
 
                 {/* APARTADO 1: DATOS INSTITUCIONALES (SOLO LECTURA) Y CONTACTO EDITABLE */}
@@ -5555,11 +5704,20 @@ export default function App() {
             <div className="bg-slate-50 p-5 rounded-2xl border space-y-3.5 text-center">
               <span className="text-xs font-black uppercase text-slate-600 block">Acción requerida para la Solicitud</span>
               <div className="grid grid-cols-2 gap-3.5">
-                <button onClick={() => handleAcceptSessionRequest(pendingRequestToReview.session)} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3.5 rounded-xl text-sm shadow-md transition flex items-center justify-center space-x-2">
-                  <CheckCircle className="w-4.5 h-4.5" />
-                  <span>Aceptar</span>
-                </button>
-                <button onClick={() => handleRejectSessionRequest(pendingRequestToReview.session)} className="w-full bg-red-600 hover:bg-red-700 text-white font-black py-3.5 rounded-xl text-sm shadow-md transition flex items-center justify-center space-x-2">
+                {currentUser.role === 'tutor' && (
+                  <button onClick={() => handleAcceptSessionRequest(pendingRequestToReview.session)} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3.5 rounded-xl text-sm shadow-md transition flex items-center justify-center space-x-2">
+                    <CheckCircle className="w-4.5 h-4.5" />
+                    <span>Aceptar</span>
+                  </button>
+                )}
+                <button onClick={() => {
+                  if (currentUser.role === 'tutor') {
+                    handleRejectSessionRequest(pendingRequestToReview.session);
+                  } else {
+                    handleStudentCancelPendingSession(pendingRequestToReview.session);
+                  }
+                  setPendingRequestToReview(null);
+                }} className="w-full bg-red-600 hover:bg-red-700 text-white font-black py-3.5 rounded-xl text-sm shadow-md transition flex items-center justify-center space-x-2">
                   <XCircle className="w-4.5 h-4.5" />
                   <span>Rechazar</span>
                 </button>
@@ -5699,7 +5857,7 @@ export default function App() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Fecha</label>
-                      <input type="date" min={todayDateFormatted} value={bookingDate} onChange={e => setBookingDate(e.target.value)} required className="w-full p-3 border rounded-xl text-xs" />
+                      <input type="date" min={todayDateFormatted} value={bookingDate || todayDateFormatted} onChange={e => setBookingDate(e.target.value)} required className="w-full p-3 border rounded-xl text-xs" />
                     </div>
                     <div>
                       <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Hora</label>
