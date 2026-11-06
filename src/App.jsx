@@ -12,23 +12,9 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { supabase } from './supabaseClient';
 
-const INITIAL_USERS = [
-  {
-    id: 'usr_admin_1',
-    name: 'Admin Global',
-    email: 'admin@gmail.com',
-    password: 'Admin123!',
-    role: 'admin',
-    status: 'active',
-    career: 'Informática',
-    phone: '',
-    cedula: '',
-    address: 'Sede Principal IUJO',
-    primaryColor: '#2563eb',
-    avatar: '',
-    createdAt: '2026-10-27'
-  }
-];
+// JhonOcz - Credenciales predeterminadas y datos sensibles eliminados del código fuente por motivos de seguridad.
+// La autenticación y los datos de usuarios se consultan y gestionan de forma dinámica y exclusiva desde la base de datos Supabase.
+const INITIAL_USERS = [];
 
 const INITIAL_CAREERS = [
   { id: 'car_1', code: 'INF', name: 'Informática' },
@@ -141,9 +127,8 @@ const INITIAL_REVIEWS = [
     status: 'approved'
   }
 ];
-const INITIAL_AUDITS = [
-  { id: 'aud_1', timestamp: '27/10/2026 10:00:00 AM', user: 'Admin Global', action: 'INICIO DE SESIÓN', details: 'Acceso seguro al panel.' }
-];
+// JhonOcz - Registro inicial vacío por seguridad; los eventos de auditoría se cargan exclusivamente desde la base de datos Supabase
+const INITIAL_AUDITS = [];
 const INITIAL_NOTIFICATIONS = [];
 
 // Funciones de fecha y hora en Zona Horaria de Venezuela (America/Caracas, UTC-4)
@@ -2412,13 +2397,14 @@ export default function App() {
 
       if (currentUser.role === 'tutor' && notif.type === 'booking_request') {
         if (targetSession) {
+          // JhonOcz - Obtención segura de datos de estudiante
           const studentObj = users.find(u => u.id === targetSession.studentId) || {
-            name: targetSession.studentName,
-            email: 'estudiante@gmail.com',
-            phone: '0424-1234567',
-            cedula: 'V-28999999',
-            career: 'Informática',
-            address: 'Catia, Caracas'
+            name: targetSession.studentName || 'Estudiante Solicitante',
+            email: 'No registrado',
+            phone: 'No registrado',
+            cedula: 'No registrada',
+            career: currentUser?.career || 'Informática',
+            address: 'Sede IUJO'
           };
           setPendingRequestToReview({ session: targetSession, student: studentObj });
         } else {
@@ -2543,13 +2529,22 @@ export default function App() {
       }
       setCareers(prev => prev.filter(c => c.id !== careerToDelete.id));
       setCatalogSubjects(prev => prev.filter(s => s.career.toLowerCase() !== careerToDelete.name.toLowerCase()));
+      // JhonOcz - Integridad relacional: eliminar en cascada materias y tutorías vinculadas a la carrera eliminada
       try {
         await supabase.from('subjects').delete().eq('career', careerToDelete.name);
-      } catch (err) {}
+        await supabase.from('sessions').delete().eq('career', careerToDelete.name);
+      } catch (errRel) {
+        console.error('Error limpiando relaciones de la carrera eliminada:', errRel);
+      }
+      setSessions(prev => {
+        const filtered = prev.filter(s => s.career !== careerToDelete.name);
+        try { localStorage.setItem('aura_cached_sessions', JSON.stringify(filtered)); } catch (e) {}
+        return filtered;
+      });
       await logAudit(
         currentUser.name,
         'CARRERA ELIMINADA',
-        `Se eliminó la carrera ${careerToDelete.name} (${careerToDelete.code}) de la base de datos institucional.`
+        `Se eliminó la carrera ${careerToDelete.name} (${careerToDelete.code}) y sus materias asociadas.`
       );
       showToast(`Carrera "${careerToDelete.name}" eliminada exitosamente.`);
       setShowDeleteCareerModal(false);
@@ -2956,34 +2951,66 @@ export default function App() {
     }
   };
 
+  // JhonOcz - Integridad relacional y eliminación en cascada de materias y tutorías huérfanas
   const handleDeleteSubjectFromCatalog = async (subjectId, subjectName, careerName) => {
-    if (!window.confirm(`¿Estás seguro de que deseas eliminar la materia "${subjectName}" del pensum de ${careerName}?`)) {
+    if (!window.confirm(`¿Estás seguro de que deseas eliminar la materia "${subjectName}" del pensum de ${careerName}? Esta acción limpiará también las tutorías asociadas para garantizar la exactitud de las métricas.`)) {
       return;
     }
 
     try {
+      // 1. Eliminar la materia de la base de datos Supabase
       const { error } = await supabase.from('subjects').delete().eq('id', subjectId);
       if (error) {
         console.error('Error eliminando materia de Supabase:', error);
         showToast('Error al eliminar de la base de datos: ' + error.message, 'danger');
         return;
       }
+
+      // 2. Integridad en cascada: eliminar sesiones asociadas a esta materia en Supabase
+      try {
+        await supabase.from('sessions').delete().eq('subject', subjectName);
+      } catch (errSes) {
+        console.error('Error al depurar sesiones de materia eliminada:', errSes);
+      }
+
+      // 3. Desvincular de los tutores en Supabase
+      try {
+        const tutorsWithSub = users.filter(u => Array.isArray(u.subjectsDetailed) && u.subjectsDetailed.some(sd => sd.name === subjectName));
+        for (const t of tutorsWithSub) {
+          const updatedDetailed = (t.subjectsDetailed || []).filter(sd => sd.name !== subjectName);
+          await supabase.from('users').update({ subjects_detailed: updatedDetailed }).eq('id', t.id);
+        }
+      } catch (errTut) {}
     } catch (err) {
       console.error(err);
     }
 
+    // 4. Actualizar catálogo local
     const updatedCatalog = catalogSubjects.filter(s => s.id !== subjectId && !(s.name === subjectName && s.career === careerName));
     setCatalogSubjects(updatedCatalog);
     try {
       localStorage.setItem('aura_catalog_subjects', JSON.stringify(updatedCatalog));
     } catch (err) {}
 
+    // 5. Depurar sesiones huérfanas localmente
+    setSessions(prev => {
+      const filtered = prev.filter(s => s.subject !== subjectName);
+      try { localStorage.setItem('aura_cached_sessions', JSON.stringify(filtered)); } catch (err) {}
+      return filtered;
+    });
+
+    // 6. Depurar la materia de tutores locales
+    setUsers(prev => prev.map(u => {
+      if (!Array.isArray(u.subjectsDetailed)) return u;
+      return { ...u, subjectsDetailed: u.subjectsDetailed.filter(sd => sd.name !== subjectName) };
+    }));
+
     await logAudit(
       currentUser.name,
       'MATERIA ELIMINADA',
-      `Se eliminó la materia "${subjectName}" del catálogo de ${careerName}.`
+      `Se eliminó la materia "${subjectName}" del catálogo de ${careerName} y se depuraron sus tutorías relacionadas.`
     );
-    showToast(`Materia "${subjectName}" eliminada del catálogo y de la base de datos.`);
+    showToast(`Materia "${subjectName}" eliminada y métricas sincronizadas.`);
   };
 
   const exportDataToCSV = (filename, dataArray) => {
@@ -3156,45 +3183,68 @@ export default function App() {
   const tutorPercentage = totalNonAdminUsersCount > 0 ? (activeTutorsCount / totalNonAdminUsersCount) * 100 : 0;
   const studentDashArray = `${studentPercentage} 100`;
 
-  // Helper para determinar la carrera correspondiente a una tutoría
+  // JhonOcz - Helper para determinar la carrera correspondiente a una tutoría con integridad relacional
   const getSessionCareer = (session) => {
-    if (!session) return 'Otras Carreras';
-    // 1. Buscar en materias detalladas del tutor
+    if (!session) return null;
+    // 1. Si la sesión tiene carrera asignada explícitamente y existe en carreras activas
+    if (session.career) {
+      const match = (careers || []).find(c => c.name.toLowerCase() === session.career.toLowerCase());
+      if (match) return match.name;
+    }
+    // 2. Buscar en el catálogo oficial de materias activas del pensum
+    const catalogMatch = (catalogSubjects || []).find(cs => cs.name.toLowerCase() === (session.subject || '').toLowerCase());
+    if (catalogMatch && catalogMatch.career) return catalogMatch.career;
+
+    // 3. Buscar en materias detalladas del tutor
     const tutor = (users || []).find(u => u && u.id === session.tutorId);
     if (tutor && Array.isArray(tutor.subjectsDetailed)) {
-      const match = tutor.subjectsDetailed.find(sd => sd.name === session.subject);
+      const match = tutor.subjectsDetailed.find(sd => sd.name.toLowerCase() === (session.subject || '').toLowerCase());
       if (match && match.career) return match.career;
     }
-    // 2. Buscar en materias detalladas de cualquier usuario
+    // 4. Buscar en materias detalladas de cualquier docente activo
     for (const u of (users || [])) {
       if (u && Array.isArray(u.subjectsDetailed)) {
-        const match = u.subjectsDetailed.find(sd => sd.name === session.subject);
+        const match = u.subjectsDetailed.find(sd => sd.name.toLowerCase() === (session.subject || '').toLowerCase());
         if (match && match.career) return match.career;
       }
     }
-    // 3. Carrera registrada del tutor
+    // 5. Carrera registrada del tutor
     if (tutor && tutor.career) return tutor.career;
-    // 4. Carrera registrada del estudiante
+    // 6. Carrera registrada del estudiante
     const student = (users || []).find(u => u && u.id === session.studentId);
     if (student && student.career) return student.career;
-    return 'Otras Carreras';
+    return null;
   };
 
+  // JhonOcz - Depuración e integridad relacional de métricas:
+  // Solo se contabilizan tutorías cuyas materias aún existan en el catálogo académico activo o correspondan a carreras activas.
+  // Esto previene que materias eliminadas se muestren como registros huérfanos ("Otras materias" / "Otras Carreras").
+  const validCatalogSubjectNames = new Set((catalogSubjects || []).map(cs => (cs.name || '').toLowerCase().trim()));
+  const validCareerNames = new Set((careers || []).map(c => (c.name || '').toLowerCase().trim()));
+
+  const activeValidSessions = (sessions || []).filter(s => {
+    if (!s || !s.subject) return false;
+    const isSubjectValid = validCatalogSubjectNames.has(s.subject.toLowerCase().trim());
+    const sessionCareer = getSessionCareer(s);
+    const isCareerValid = sessionCareer && validCareerNames.has(sessionCareer.toLowerCase().trim());
+    return isSubjectValid || isCareerValid;
+  });
+
   // Métricas generales de tutorías
-  const totalSessionsCount = (sessions || []).length;
-  const completedSessionsCount = (sessions || []).filter(s => s.status === 'completed').length;
-  const pendingSessionsCount = (sessions || []).filter(s => s.status === 'pending').length;
-  const confirmedSessionsCount = (sessions || []).filter(s => s.status === 'confirmed').length;
+  const totalSessionsCount = activeValidSessions.length;
+  const completedSessionsCount = activeValidSessions.filter(s => s.status === 'completed').length;
+  const pendingSessionsCount = activeValidSessions.filter(s => s.status === 'pending').length;
+  const confirmedSessionsCount = activeValidSessions.filter(s => s.status === 'confirmed').length;
   const inWaitingSessionsCount = pendingSessionsCount + confirmedSessionsCount; // En período de espera
-  const rejectedSessionsCount = (sessions || []).filter(s => s.status === 'rejected').length;
+  const rejectedSessionsCount = activeValidSessions.filter(s => s.status === 'rejected').length;
 
   const completedPctGeneral = totalSessionsCount > 0 ? (completedSessionsCount / totalSessionsCount) * 100 : 0;
   const inWaitingPctGeneral = totalSessionsCount > 0 ? (inWaitingSessionsCount / totalSessionsCount) * 100 : 0;
   const rejectedPctGeneral = totalSessionsCount > 0 ? (rejectedSessionsCount / totalSessionsCount) * 100 : 0;
 
-  // Métricas desglosadas por carrera
+  // Métricas desglosadas estricta y únicamente por las carreras oficiales registradas
   const careerStats = (careers || []).map(career => {
-    const careerSessions = (sessions || []).filter(s => getSessionCareer(s) === career.name);
+    const careerSessions = activeValidSessions.filter(s => getSessionCareer(s) === career.name);
     const total = careerSessions.length;
     const completed = careerSessions.filter(s => s.status === 'completed').length;
     const pending = careerSessions.filter(s => s.status === 'pending').length;
@@ -3223,30 +3273,6 @@ export default function App() {
       shareOfTotal
     };
   });
-
-  // Si hay tutorías asociadas a una carrera que no figure en la lista oficial
-  const otherCareerSessions = (sessions || []).filter(s => !(careers || []).some(c => c.name === getSessionCareer(s)));
-  if (otherCareerSessions.length > 0) {
-    const total = otherCareerSessions.length;
-    const completed = otherCareerSessions.filter(s => s.status === 'completed').length;
-    const inWaiting = otherCareerSessions.filter(s => s.status === 'pending' || s.status === 'confirmed').length;
-    const rejected = otherCareerSessions.filter(s => s.status === 'rejected').length;
-    careerStats.push({
-      id: 'car_other',
-      name: 'Otras Carreras',
-      code: 'OTR',
-      total,
-      completed,
-      inWaiting,
-      pending: otherCareerSessions.filter(s => s.status === 'pending').length,
-      confirmed: otherCareerSessions.filter(s => s.status === 'confirmed').length,
-      rejected,
-      completedPct: total > 0 ? (completed / total) * 100 : 0,
-      inWaitingPct: total > 0 ? (inWaiting / total) * 100 : 0,
-      rejectedPct: total > 0 ? (rejected / total) * 100 : 0,
-      shareOfTotal: totalSessionsCount > 0 ? (total / totalSessionsCount) * 100 : 0
-    });
-  }
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800 font-sans flex flex-col text-sm sm:text-base">
@@ -3591,10 +3617,11 @@ export default function App() {
                           {activeTutorSessions.length > 0 ? (
                             <div className="space-y-3.5 max-h-[620px] overflow-y-auto pr-1">
                               {activeTutorSessions.map(session => {
+                                // JhonOcz - Obtención segura de datos de estudiante sin datos ficticios expuestos
                                 const studentObj = users.find(u => u.id === session.studentId) || {
                                   name: session.studentName || 'Estudiante Interesado',
-                                  email: 'estudiante@gmail.com',
-                                  career: currentUser.career,
+                                  email: 'No registrado',
+                                  career: currentUser?.career || 'Informática',
                                   cedula: 'No especificada',
                                   phone: 'No especificado'
                                 };

@@ -155,4 +155,23 @@ BEGIN
   END IF;
 END $$;
 
+-- 8. INTEGRIDAD RELACIONAL: ELIMINACIÓN EN CASCADA DE TUTORÍAS HUÉRFANAS (JhonOcz)
+-- Cuando se elimina una materia del catálogo 'subjects', esta función y trigger
+-- limpian automáticamente en cascada las tutorías asociadas en 'sessions'
+-- evitando registros huérfanos que alteren las métricas estadísticas ("Otras materias").
+CREATE OR REPLACE FUNCTION public.fn_cascade_delete_subject_sessions()
+RETURNS TRIGGER AS $$
+BEGIN
+  DELETE FROM public.sessions WHERE subject = OLD.name;
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_cascade_delete_subject_sessions ON public.subjects;
+
+CREATE TRIGGER trg_cascade_delete_subject_sessions
+AFTER DELETE ON public.subjects
+FOR EACH ROW
+EXECUTE FUNCTION public.fn_cascade_delete_subject_sessions();
+
 
