@@ -6,7 +6,7 @@ import {
   Search, Calendar, Download, Filter, Star, PieChart, Camera,
   Palette, Clock, Trash2, ShieldAlert, MessageCircle, CheckCircle,
   XCircle, KeyRound, UserPlus, Bell, X, Mail, Lock, ChevronDown, ChevronRight, Save, Edit3, FileText,
-  TrendingUp, CheckCircle2, Clock3, Upload, UserCheck, UserX, AlertTriangle, Layers, Plus, FileSpreadsheet, Video, MapPin, ExternalLink, Info, Send, RefreshCw, ArrowLeft
+  TrendingUp, CheckCircle2, Clock3, Upload, UserCheck, UserX, AlertTriangle, Layers, Plus, FileSpreadsheet, Video, MapPin, ExternalLink, Info, Send, RefreshCw, ArrowLeft, CheckCheck
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -115,7 +115,32 @@ const INITIAL_CATALOG_SUBJECTS = [
 ];
 
 const INITIAL_SESSIONS = [];
-const INITIAL_REVIEWS = [];
+const INITIAL_REVIEWS = [
+  {
+    id: 'rev_1',
+    author: 'Eduardo Mendoza',
+    target: 'Carlos Silva',
+    comment: 'Excelente explicación en Algoritmos y Programación. Resolvió todas mis dudas con paciencia y ejemplos claros de diagramas de flujo.',
+    rating: 5,
+    status: 'approved'
+  },
+  {
+    id: 'rev_2',
+    author: 'Mariana Gómez',
+    target: 'Ana Martínez',
+    comment: 'Muy buena metodología para explicar Matemática II. Me ayudó muchísimo a prepararme para el examen final.',
+    rating: 5,
+    status: 'approved'
+  },
+  {
+    id: 'rev_3',
+    author: 'Gabriel Rivas',
+    target: 'Carlos Silva',
+    comment: 'Clase dinámica y muy puntual en los laboratorios de cómputo. Totalmente recomendado.',
+    rating: 4,
+    status: 'approved'
+  }
+];
 const INITIAL_AUDITS = [
   { id: 'aud_1', timestamp: '27/10/2026 10:00:00 AM', user: 'Admin Global', action: 'INICIO DE SESIÓN', details: 'Acceso seguro al panel.' }
 ];
@@ -505,12 +530,49 @@ const mapAuditToDB = (a) => ({
   details: a.details || ''
 });
 
-const mapNotifFromDB = (n) => ({
-  ...n,
-  userId: n.user_id || n.userId,
-  sessionId: n.session_id || n.sessionId,
-  read: n.read ?? false
-});
+const getStoredReadNotifIds = () => {
+  try {
+    const raw = localStorage.getItem('aura_read_notif_ids');
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch (e) {
+    return new Set();
+  }
+};
+
+const saveStoredReadNotifId = (id) => {
+  if (!id) return;
+  try {
+    const set = getStoredReadNotifIds();
+    set.add(id);
+    localStorage.setItem('aura_read_notif_ids', JSON.stringify([...set]));
+  } catch (e) {}
+};
+
+const saveMultipleStoredReadNotifIds = (ids) => {
+  if (!ids || ids.length === 0) return;
+  try {
+    const set = getStoredReadNotifIds();
+    ids.forEach(id => { if (id) set.add(id); });
+    localStorage.setItem('aura_read_notif_ids', JSON.stringify([...set]));
+  } catch (e) {}
+};
+
+const mapNotifFromDB = (n) => {
+  const readSet = getStoredReadNotifIds();
+  const isRead = Boolean(
+    n.read === true ||
+    n.read === 'true' ||
+    n.read === 1 ||
+    n.read === 't' ||
+    readSet.has(n.id)
+  );
+  return {
+    ...n,
+    userId: n.user_id || n.userId,
+    sessionId: n.session_id || n.sessionId,
+    read: isRead
+  };
+};
 
 const mapNotifToDB = (n) => ({
   id: n.id,
@@ -520,7 +582,7 @@ const mapNotifToDB = (n) => ({
   session_id: n.sessionId || n.session_id || null,
   type: n.type || 'general',
   time: n.time || 'Justo ahora',
-  read: n.read ?? false
+  read: Boolean(n.read)
 });
 
 export default function App() {
@@ -671,6 +733,8 @@ export default function App() {
 
   const [pendingRequestToReview, setPendingRequestToReview] = useState(null);
   const [filterReviewRating, setFilterReviewRating] = useState('');
+  const [reviewSearchQuery, setReviewSearchQuery] = useState('');
+  const [tutorOnlyMyReviews, setTutorOnlyMyReviews] = useState(false);
   const [viewingTutorProfile, setViewingTutorProfile] = useState(null);
 
   // Estados para Gestión y Creación/Edición/Eliminación de Usuarios por Administrador
@@ -850,8 +914,17 @@ export default function App() {
         }
         if (notifsData) {
           const mappedNotifs = notifsData.map(mapNotifFromDB);
-          setNotifications(mappedNotifs);
-          try { localStorage.setItem('aura_cached_notifications', JSON.stringify(mappedNotifs)); } catch (e) {}
+          setNotifications(prev => {
+            const readSet = getStoredReadNotifIds();
+            const merged = mappedNotifs.map(n => {
+              if (readSet.has(n.id) || (prev.find(p => p.id === n.id)?.read)) {
+                return { ...n, read: true };
+              }
+              return n;
+            });
+            try { localStorage.setItem('aura_cached_notifications', JSON.stringify(merged)); } catch (e) {}
+            return merged;
+          });
         }
       } else {
         // Carga de sincronización en segundo plano ultrarrápida: solo tablas dinámicas
@@ -876,8 +949,17 @@ export default function App() {
 
         if (notifsData) {
           const mappedNotifs = notifsData.map(mapNotifFromDB);
-          setNotifications(mappedNotifs);
-          try { localStorage.setItem('aura_cached_notifications', JSON.stringify(mappedNotifs)); } catch (e) {}
+          setNotifications(prev => {
+            const readSet = getStoredReadNotifIds();
+            const merged = mappedNotifs.map(n => {
+              if (readSet.has(n.id) || (prev.find(p => p.id === n.id)?.read)) {
+                return { ...n, read: true };
+              }
+              return n;
+            });
+            try { localStorage.setItem('aura_cached_notifications', JSON.stringify(merged)); } catch (e) {}
+            return merged;
+          });
         }
 
         // Verificar si la sesión de este usuario fue transferida a otro dispositivo
@@ -947,7 +1029,18 @@ export default function App() {
       }
       const { data: dbNotifs } = await supabase.from('notifications').select('*').order('created_at', { ascending: false });
       if (dbNotifs) {
-        setNotifications(dbNotifs.map(mapNotifFromDB));
+        const mappedNotifs = dbNotifs.map(mapNotifFromDB);
+        setNotifications(prev => {
+          const readSet = getStoredReadNotifIds();
+          const merged = mappedNotifs.map(n => {
+            if (readSet.has(n.id) || (prev.find(p => p.id === n.id)?.read)) {
+              return { ...n, read: true };
+            }
+            return n;
+          });
+          try { localStorage.setItem('aura_cached_notifications', JSON.stringify(merged)); } catch (e) {}
+          return merged;
+        });
       }
       showToast('Mensajes sincronizados correctamente', 'info');
     } catch (err) {
@@ -1016,7 +1109,11 @@ export default function App() {
       time: 'Justo ahora',
       read: false
     };
-    setNotifications(prev => [newNotif, ...prev]);
+    setNotifications(prev => {
+      const updated = [newNotif, ...prev];
+      try { localStorage.setItem('aura_cached_notifications', JSON.stringify(updated)); } catch (e) {}
+      return updated;
+    });
     try {
       const { error } = await supabase.from('notifications').insert([mapNotifToDB(newNotif)]);
       if (error) console.error('Error guardando notificación:', error);
@@ -2197,8 +2294,16 @@ export default function App() {
     const ratedSessionId = sessionToRate.id;
     const ratedTutorName = sessionToRate.tutorName;
 
-    setReviews(prev => [newReview, ...prev]);
-    setSessions(prev => prev.map(s => s.id === ratedSessionId ? { ...s, status: 'completed' } : s));
+    setReviews(prev => {
+      const updated = [newReview, ...prev];
+      try { localStorage.setItem('aura_cached_reviews', JSON.stringify(updated)); } catch (err) {}
+      return updated;
+    });
+    setSessions(prev => {
+      const updated = prev.map(s => s.id === ratedSessionId ? { ...s, status: 'completed' } : s);
+      try { localStorage.setItem('aura_cached_sessions', JSON.stringify(updated)); } catch (err) {}
+      return updated;
+    });
     setSessionToRate(null);
     setRatingComment('');
     setRatingStars(5);
@@ -2213,8 +2318,48 @@ export default function App() {
     }
   };
 
+  const handleMarkNotificationAsRead = async (notifId, e) => {
+    if (e) e.stopPropagation();
+    saveStoredReadNotifId(notifId);
+    setNotifications(prev => {
+      const updated = prev.map(n => n.id === notifId ? { ...n, read: true } : n);
+      try { localStorage.setItem('aura_cached_notifications', JSON.stringify(updated)); } catch (err) {}
+      return updated;
+    });
+
+    try {
+      await supabase.from('notifications').update({ read: true }).eq('id', notifId);
+    } catch (err) {
+      console.error('Error marcando notificación individual como leída:', err);
+    }
+  };
+
+  const handleMarkAllNotificationsAsRead = async () => {
+    const unreadIds = userNotifications.filter(n => !n.read).map(n => n.id);
+    if (unreadIds.length === 0) return;
+    saveMultipleStoredReadNotifIds(unreadIds);
+
+    setNotifications(prev => {
+      const updated = prev.map(n => n.userId === currentUser?.id ? { ...n, read: true } : n);
+      try { localStorage.setItem('aura_cached_notifications', JSON.stringify(updated)); } catch (err) {}
+      return updated;
+    });
+
+    try {
+      await supabase.from('notifications').update({ read: true }).eq('user_id', currentUser.id);
+    } catch (err) {
+      console.error('Error marcando todas las notificaciones como leídas:', err);
+    }
+    showToast('Todas las notificaciones han sido marcadas como leídas', 'info');
+  };
+
   const handleNotificationClick = async (notif) => {
-    setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, read: true } : n));
+    saveStoredReadNotifId(notif.id);
+    setNotifications(prev => {
+      const updated = prev.map(n => n.id === notif.id ? { ...n, read: true } : n);
+      try { localStorage.setItem('aura_cached_notifications', JSON.stringify(updated)); } catch (err) {}
+      return updated;
+    });
     setShowNotificationsModal(false);
 
     try {
@@ -2288,6 +2433,22 @@ export default function App() {
   };
 
   const handleAcceptSessionRequest = async (sessionObj) => {
+    // 1. Marcar de inmediato las notificaciones de esta solicitud como leídas
+    const matchingNotifIds = notifications
+      .filter(n => (n.sessionId === sessionObj.id || n.session_id === sessionObj.id) && n.userId === currentUser.id)
+      .map(n => n.id);
+    saveMultipleStoredReadNotifIds(matchingNotifIds);
+
+    setNotifications(prev => {
+      const updated = prev.map(n => ((n.sessionId === sessionObj.id || n.session_id === sessionObj.id) && n.userId === currentUser.id) ? { ...n, read: true } : n);
+      try { localStorage.setItem('aura_cached_notifications', JSON.stringify(updated)); } catch (err) {}
+      return updated;
+    });
+
+    try {
+      await supabase.from('notifications').update({ read: true }).eq('session_id', sessionObj.id).eq('user_id', currentUser.id);
+    } catch (e) {}
+
     const currentChat = (sessionObj.chat || []).filter(m => !m || !m.__meta);
     const initChat = currentChat.length > 0 ? currentChat : [
       {
@@ -2337,6 +2498,22 @@ export default function App() {
   };
 
   const handleRejectSessionRequest = async (sessionObj) => {
+    // 1. Marcar de inmediato las notificaciones de esta solicitud como leídas
+    const matchingNotifIds = notifications
+      .filter(n => (n.sessionId === sessionObj.id || n.session_id === sessionObj.id) && n.userId === currentUser.id)
+      .map(n => n.id);
+    saveMultipleStoredReadNotifIds(matchingNotifIds);
+
+    setNotifications(prev => {
+      const updated = prev.map(n => ((n.sessionId === sessionObj.id || n.session_id === sessionObj.id) && n.userId === currentUser.id) ? { ...n, read: true } : n);
+      try { localStorage.setItem('aura_cached_notifications', JSON.stringify(updated)); } catch (err) {}
+      return updated;
+    });
+
+    try {
+      await supabase.from('notifications').update({ read: true }).eq('session_id', sessionObj.id).eq('user_id', currentUser.id);
+    } catch (e) {}
+
     setSessions(prev => prev.map(s => s.id === sessionObj.id ? { ...s, status: 'rejected' } : s));
     setPendingRequestToReview(null);
     try {
@@ -3202,6 +3379,17 @@ export default function App() {
                 >
                   <MessageCircle className="w-4.5 h-4.5 shrink-0" />
                   <span className="whitespace-nowrap">Mensajes</span>
+                </button>
+              )}
+
+              {currentUser.role !== 'admin' && (
+                <button
+                  onClick={() => setActiveTab('reviews')}
+                  className={`px-5 py-2.5 rounded-xl text-sm font-bold transition flex items-center space-x-2.5 shrink-0 ${activeTab === 'reviews' ? 'text-white shadow-md' : 'text-slate-700 hover:bg-slate-100'}`}
+                  style={activeTab === 'reviews' ? { backgroundColor: primaryColor } : {}}
+                >
+                  <Star className="w-4.5 h-4.5 shrink-0" />
+                  <span className="whitespace-nowrap">Reseñas</span>
                 </button>
               )}
 
@@ -6117,6 +6305,262 @@ export default function App() {
                 </div>
               );
             })()}
+
+            {/* MÓDULO DE RESEÑAS Y VALORACIONES PARA TUTORES Y ALUMNOS (MODO CONSULTA - SOLO LECTURA) */}
+            {activeTab === 'reviews' && currentUser.role !== 'admin' && (() => {
+              const approvedReviews = reviews.filter(r => r.status === 'approved' || !r.status);
+              const totalCount = approvedReviews.length;
+              const avgScore = totalCount > 0
+                ? (approvedReviews.reduce((acc, r) => acc + (Number(r.rating) || 5), 0) / totalCount).toFixed(1)
+                : '5.0';
+
+              const myTutorReviewsCount = currentUser.role === 'tutor'
+                ? approvedReviews.filter(r => (r.target || '').toLowerCase().includes(currentUser.name.toLowerCase())).length
+                : 0;
+
+              const filteredReviews = approvedReviews.filter(r => {
+                if (currentUser.role === 'tutor' && tutorOnlyMyReviews) {
+                  if (!(r.target || '').toLowerCase().includes(currentUser.name.toLowerCase())) return false;
+                }
+                if (filterReviewRating !== '') {
+                  const stars = Number(r.rating) || 5;
+                  if (stars !== Number(filterReviewRating)) return false;
+                }
+                if (reviewSearchQuery.trim()) {
+                  const q = reviewSearchQuery.toLowerCase().trim();
+                  const matchAuthor = (r.author || '').toLowerCase().includes(q);
+                  const matchTarget = (r.target || '').toLowerCase().includes(q);
+                  const matchComment = (r.comment || '').toLowerCase().includes(q);
+                  if (!matchAuthor && !matchTarget && !matchComment) return false;
+                }
+                return true;
+              });
+
+              return (
+                <div className="space-y-6 max-w-6xl mx-auto">
+                  {/* CABECERA PRINCIPAL */}
+                  <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-4">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-amber-50 border border-amber-200 shrink-0">
+                          <Star className="w-6 h-6 text-amber-500 fill-current" />
+                        </div>
+                        <div>
+                          <h2 className="text-xl sm:text-2xl font-black text-slate-900">
+                            Reseñas y Valoraciones Institucionales
+                          </h2>
+                          <p className="text-xs sm:text-sm text-slate-500">
+                            Historial y opiniones académicas transparentes emitidas por la comunidad de IUJO.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2 bg-amber-50 px-4 py-2 rounded-2xl border border-amber-200 text-amber-900 font-bold text-sm">
+                        <Star className="w-4.5 h-4.5 fill-current text-amber-500" />
+                        <span>Promedio Institucional: <strong>{avgScore} / 5.0</strong></span>
+                      </div>
+                    </div>
+
+                    {/* AVISO INSTITUCIONAL DE MODO SOLO LECTURA */}
+                    <div className="bg-blue-50/80 border border-blue-200/80 rounded-2xl p-4 sm:p-5 flex items-start space-x-3.5">
+                      <Info className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+                      <div className="text-xs sm:text-sm text-blue-900 space-y-1">
+                        <p className="font-extrabold text-blue-950">
+                          Panel Oficial de Consulta de Reseñas Verificadas
+                        </p>
+                        <p className="text-blue-800/90 leading-relaxed">
+                          Por políticas de integridad institucional, <strong>ningún tutor ni estudiante puede publicar reseñas libremente desde este catálogo</strong>. Las valoraciones son emitidas <strong>únicamente por estudiantes al finalizar su tutoría</strong>, a través de la notificación que les llega cuando el docente tutor marca la clase como completada.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* TARJETAS DE MÉTRICAS */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 pt-1">
+                      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex items-center space-x-3.5">
+                        <div className="w-11 h-11 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600 shrink-0">
+                          <Star className="w-6 h-6 fill-current" />
+                        </div>
+                        <div>
+                          <span className="text-[11px] font-bold uppercase text-slate-500 block">Puntaje Global</span>
+                          <span className="text-xl font-black text-slate-900">{avgScore} ★</span>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex items-center space-x-3.5">
+                        <div className="w-11 h-11 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600 shrink-0">
+                          <CheckCircle2 className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <span className="text-[11px] font-bold uppercase text-slate-500 block">Tutorías Evaluadas</span>
+                          <span className="text-xl font-black text-slate-900">{totalCount} verificadas</span>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex items-center space-x-3.5">
+                        <div className="w-11 h-11 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
+                          <ShieldCheck className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <span className="text-[11px] font-bold uppercase text-slate-500 block">Autenticidad</span>
+                          <span className="text-xl font-black text-emerald-800">100% Auditadas</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* BARRA DE FILTROS Y BÚSQUEDA */}
+                  <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3.5">
+                      {/* Búsqueda */}
+                      <div className="relative flex-1">
+                        <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          value={reviewSearchQuery}
+                          onChange={e => setReviewSearchQuery(e.target.value)}
+                          placeholder="Buscar por tutor, estudiante o comentario..."
+                          className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        {reviewSearchQuery && (
+                          <button
+                            onClick={() => setReviewSearchQuery('')}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                          >
+                            × Limpiar
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Botón para tutores: ver mis reseñas vs todas */}
+                      {currentUser.role === 'tutor' && (
+                        <button
+                          onClick={() => setTutorOnlyMyReviews(!tutorOnlyMyReviews)}
+                          className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition flex items-center space-x-2 shrink-0 ${
+                            tutorOnlyMyReviews
+                              ? 'bg-blue-600 text-white shadow-sm'
+                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          }`}
+                        >
+                          <UserCheck className="w-4 h-4" />
+                          <span>Solo mis reseñas ({myTutorReviewsCount})</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Filtros por estrellas */}
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+                      <button
+                        onClick={() => setFilterReviewRating('')}
+                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition shrink-0 ${
+                          filterReviewRating === ''
+                            ? 'text-white shadow-sm'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                        style={filterReviewRating === '' ? { backgroundColor: primaryColor } : {}}
+                      >
+                        Todas ({approvedReviews.length})
+                      </button>
+
+                      {[5, 4, 3, 2, 1].map(stars => {
+                        const count = approvedReviews.filter(r => (Number(r.rating) || 5) === stars).length;
+                        return (
+                          <button
+                            key={stars}
+                            onClick={() => setFilterReviewRating(filterReviewRating === stars ? '' : stars)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shrink-0 ${
+                              filterReviewRating === stars
+                                ? 'bg-amber-500 text-white shadow-sm'
+                                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                            }`}
+                          >
+                            <Star className="w-3.5 h-3.5 fill-current text-amber-400" />
+                            <span>{stars} Estrellas ({count})</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* LISTADO DE RESEÑAS EN TARJETAS RESPONSIVAS */}
+                  {filteredReviews.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {filteredReviews.map(r => {
+                        const stars = Number(r.rating) || 5;
+                        return (
+                          <div
+                            key={r.id}
+                            className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between space-y-4"
+                          >
+                            <div className="space-y-3">
+                              {/* Header de la tarjeta */}
+                              <div className="flex justify-between items-start gap-2">
+                                <div className="flex items-center space-x-3">
+                                  <div className="w-10 h-10 rounded-full bg-slate-100 border flex items-center justify-center font-bold text-slate-700 text-sm">
+                                    {r.author ? r.author.charAt(0).toUpperCase() : 'E'}
+                                  </div>
+                                  <div>
+                                    <h4 className="font-bold text-slate-900 text-sm">{r.author}</h4>
+                                    <span className="text-[10px] font-bold uppercase text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                                      ✓ Estudiante Verificado
+                                    </span>
+                                  </div>
+                                </div>
+                                {/* Estrellas */}
+                                <div className="flex items-center space-x-0.5 text-amber-500 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200">
+                                  {[...Array(5)].map((_, i) => (
+                                    <Star
+                                      key={i}
+                                      className={`w-3.5 h-3.5 ${i < stars ? 'fill-current text-amber-500' : 'text-slate-300'}`}
+                                    />
+                                  ))}
+                                  <span className="text-xs font-black text-amber-900 ml-1">{stars}.0</span>
+                                </div>
+                              </div>
+
+                              {/* Tutor Destinatario */}
+                              <div className="flex items-center space-x-1.5 text-xs text-slate-600 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100">
+                                <span className="font-bold text-slate-500">Docente Tutor:</span>
+                                <span className="font-extrabold text-slate-900">{r.target}</span>
+                              </div>
+
+                              {/* Comentario */}
+                              <p className="text-xs sm:text-sm text-slate-700 leading-relaxed italic bg-slate-50/50 p-3.5 rounded-2xl border border-slate-100">
+                                "{r.comment}"
+                              </p>
+                            </div>
+
+                            {/* Footer de la tarjeta */}
+                            <div className="pt-2 border-t border-slate-100 flex justify-between items-center text-[11px] text-slate-400">
+                              <span>Tutoría culminada y evaluada</span>
+                              <span className="font-bold text-emerald-600 uppercase">Aprobada</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-12 border-2 border-dashed border-slate-200 rounded-3xl bg-slate-50/50 space-y-2.5">
+                      <Star className="w-10 h-10 text-slate-300 mx-auto" />
+                      <p className="text-base font-bold text-slate-700">No se encontraron reseñas con los filtros seleccionados</p>
+                      <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                        Las opiniones de los estudiantes aparecerán aquí una vez que culminen sus tutorías institucionales.
+                      </p>
+                      {(filterReviewRating !== '' || reviewSearchQuery || tutorOnlyMyReviews) && (
+                        <button
+                          onClick={() => {
+                            setFilterReviewRating('');
+                            setReviewSearchQuery('');
+                            setTutorOnlyMyReviews(false);
+                          }}
+                          className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold rounded-xl transition"
+                        >
+                          Limpiar Filtros
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         ) : (
           <div className="max-w-xl mx-auto my-6">
@@ -6334,22 +6778,89 @@ export default function App() {
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl space-y-4 overflow-x-hidden">
             <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-bold text-lg text-slate-900 flex items-center space-x-2">
+              <div className="flex items-center space-x-2">
                 <Bell className="w-5 h-5" style={{ color: primaryColor }} />
-                <span>Notificaciones</span>
-              </h3>
-              <button onClick={() => setShowNotificationsModal(false)}><X className="w-5 h-5 text-slate-500" /></button>
+                <h3 className="font-bold text-lg text-slate-900">Notificaciones</h3>
+                {unreadNotifCount > 0 && (
+                  <span className="bg-red-500 text-white text-[11px] px-2 py-0.5 rounded-full font-black animate-pulse">
+                    {unreadNotifCount}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center space-x-2">
+                {unreadNotifCount > 0 && (
+                  <button
+                    onClick={handleMarkAllNotificationsAsRead}
+                    className="text-xs font-bold text-blue-600 hover:text-blue-800 transition flex items-center space-x-1 p-1 hover:bg-blue-50 rounded-lg"
+                    title="Marcar todas como leídas"
+                  >
+                    <CheckCheck className="w-4 h-4" />
+                    <span className="hidden sm:inline">Marcar todas leídas</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowNotificationsModal(false)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
-            <div className="space-y-2.5 max-h-[350px] overflow-y-auto">
-              {userNotifications.map(n => (
-                <div key={n.id} onClick={() => handleNotificationClick(n)} className={`p-3.5 rounded-2xl border text-sm space-y-1 cursor-pointer transition ${n.read ? 'bg-white border-slate-200' : 'bg-slate-50 border-slate-300'}`}>
-                  <div className="flex justify-between font-bold text-slate-900">
-                    <span>{n.title}</span>
-                    <span className="text-xs text-slate-500">{n.time}</span>
-                  </div>
-                  <p className="text-slate-700">{n.text}</p>
+
+            <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-0.5">
+              {userNotifications.length === 0 ? (
+                <div className="text-center py-10 text-slate-400 space-y-2">
+                  <Bell className="w-8 h-8 mx-auto text-slate-300" />
+                  <p className="text-sm font-bold text-slate-600">No tienes notificaciones pendientes</p>
+                  <p className="text-xs text-slate-400">Aquí se registrarán avisos de reservas, mensajes y tutorías.</p>
                 </div>
-              ))}
+              ) : (
+                userNotifications.map(n => (
+                  <div
+                    key={n.id}
+                    onClick={() => handleNotificationClick(n)}
+                    className={`p-3.5 rounded-2xl border text-sm space-y-1.5 cursor-pointer transition relative ${
+                      n.read
+                        ? 'bg-white border-slate-200 text-slate-600 opacity-75 hover:opacity-100 hover:border-slate-300'
+                        : 'bg-blue-50/70 border-blue-200 text-slate-900 shadow-2xs hover:border-blue-300'
+                    }`}
+                  >
+                    <div className="flex justify-between items-start gap-2">
+                      <div className="flex items-center space-x-2 min-w-0">
+                        {!n.read ? (
+                          <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0 inline-block animate-pulse" />
+                        ) : (
+                          <span className="w-2 h-2 rounded-full bg-slate-300 shrink-0 inline-block" />
+                        )}
+                        <span className={`font-bold truncate ${!n.read ? 'text-blue-950 font-black' : 'text-slate-700'}`}>
+                          {n.title}
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-1.5 shrink-0">
+                        <span className="text-[10px] text-slate-400">{n.time}</span>
+                        {!n.read && (
+                          <button
+                            type="button"
+                            onClick={(e) => handleMarkNotificationAsRead(n.id, e)}
+                            title="Marcar como leída"
+                            className="p-1 rounded-md text-blue-600 hover:text-blue-800 hover:bg-blue-100 transition"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <p className={`text-xs leading-relaxed ${!n.read ? 'text-slate-800 font-medium' : 'text-slate-500'}`}>
+                      {n.text}
+                    </p>
+                    <div className="flex justify-between items-center pt-1 text-[10px]">
+                      <span className={`${!n.read ? 'text-blue-600 font-bold' : 'text-slate-400'}`}>
+                        {!n.read ? '• Nueva (Haz clic para ver)' : '✓ Leída'}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>

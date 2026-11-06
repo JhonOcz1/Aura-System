@@ -134,3 +134,25 @@ INSERT INTO public.subjects (id, career, semester, name) VALUES
 ('sub_edpr_6', 'Educación Primaria', 6, 'Investigación y Práctica Docente Integral')
 ON CONFLICT (id) DO NOTHING;
 
+-- 7. TABLAS 'NOTIFICATIONS' Y 'REVIEWS' (Políticas de Seguridad y Acceso RLS)
+ALTER TABLE IF EXISTS public.notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.reviews ENABLE ROW LEVEL SECURITY;
+
+DO $$ 
+BEGIN
+  -- Permisos públicos para notifications (lectura, inserción y marcado de lectura)
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'notifications' AND policyname = 'Allow public access to notifications'
+  ) THEN
+    CREATE POLICY "Allow public access to notifications" ON public.notifications FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+
+  -- Permisos públicos para reviews (lectura y registro de calificaciones auditadas)
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'reviews' AND policyname = 'Allow public access to reviews'
+  ) THEN
+    CREATE POLICY "Allow public access to reviews" ON public.reviews FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+END $$;
+
+
