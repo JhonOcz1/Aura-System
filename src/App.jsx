@@ -409,9 +409,14 @@ function RegisterForm({ users, careers, onRegisterSuccess, onCancel, setRegError
 // Mapeadores para compatibilidad entre el Frontend y el esquema de Supabase
 const mapUserFromDB = (u) => {
   if (!u) return null;
-  const detailed = Array.isArray(u.subjects_detailed) ? u.subjects_detailed : (Array.isArray(u.subjectsDetailed) ? u.subjectsDetailed : []);
+  const rawDetailed = Array.isArray(u.subjects_detailed) ? u.subjects_detailed : (Array.isArray(u.subjectsDetailed) ? u.subjectsDetailed : []);
+  const sessionMeta = rawDetailed.find(s => s && s.__session);
+  const detailed = rawDetailed.filter(s => !s || !s.__session);
   return {
     ...u,
+    sessionToken: sessionMeta?.token || u.sessionToken || null,
+    sessionLastActive: sessionMeta?.last_active || u.sessionLastActive || null,
+    sessionDevice: sessionMeta?.device || u.sessionDevice || null,
     primaryColor: u.primary_color || u.primaryColor || '#2563eb',
     createdAt: u.created_at || u.createdAt || '',
     subjectsDetailed: detailed,
@@ -421,22 +426,27 @@ const mapUserFromDB = (u) => {
   };
 };
 
-const mapUserToDB = (u) => ({
-  id: u.id,
-  name: u.name,
-  email: u.email,
-  password: u.password,
-  role: u.role || 'student',
-  status: u.status || 'active',
-  career: u.career || '',
-  cedula: u.cedula || '',
-  phone: u.phone || '',
-  address: u.address || '',
-  primary_color: u.primaryColor || u.primary_color || '#2563eb',
-  avatar: u.avatar || '',
-  created_at: u.createdAt || u.created_at || new Date().toISOString(),
-  subjects_detailed: u.subjectsDetailed || u.subjects_detailed || []
-});
+const mapUserToDB = (u) => {
+  const detailed = Array.isArray(u.subjectsDetailed) ? u.subjectsDetailed : (Array.isArray(u.subjects_detailed) ? u.subjects_detailed : []);
+  const cleanDetailed = detailed.filter(s => !s || !s.__session);
+  const sessionObj = u.sessionToken ? [{ __session: true, token: u.sessionToken, last_active: u.sessionLastActive || Date.now(), device: u.sessionDevice || '' }] : [];
+  return {
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    password: u.password,
+    role: u.role || 'student',
+    status: u.status || 'active',
+    career: u.career || '',
+    cedula: u.cedula || '',
+    phone: u.phone || '',
+    address: u.address || '',
+    primary_color: u.primaryColor || u.primary_color || '#2563eb',
+    avatar: u.avatar || '',
+    created_at: u.createdAt || u.created_at || new Date().toISOString(),
+    subjects_detailed: [...cleanDetailed, ...sessionObj]
+  };
+};
 
 const mapSessionFromDB = (s) => {
   const rawChat = Array.isArray(s.chat) ? s.chat : [];
@@ -601,7 +611,9 @@ export default function App() {
   const [loginPassword, setLoginPassword] = useState('');
   const [showLoginPass, setShowLoginPass] = useState(false);
   const [loginError, setLoginError] = useState('');
+  const [activeSessionConflictUser, setActiveSessionConflictUser] = useState(null);
   const [regError, setRegError] = useState('');
+  const lastActivityRef = useRef(Date.now());
 
   // Formulario de edición de datos personales del perfil
   const [profileEditForm, setProfileEditForm] = useState({
@@ -773,13 +785,24 @@ export default function App() {
                 if (fresh.status !== 'active') {
                   setCurrentUser(null);
                   localStorage.removeItem('aura_active_user');
+                  localStorage.removeItem('aura_session_token');
                 } else {
+                  // Verificar validez del token de sesión única en este equipo
+                  const myLocalToken = localStorage.getItem('aura_session_token');
+                  if (fresh.sessionToken && myLocalToken && fresh.sessionToken !== myLocalToken) {
+                    setCurrentUser(null);
+                    localStorage.removeItem('aura_active_user');
+                    localStorage.removeItem('aura_session_token');
+                    showToast('Tu sesión ha sido cerrada porque se inició sesión en otro dispositivo.', 'danger');
+                    return;
+                  }
                   setCurrentUser(fresh);
                   localStorage.setItem('aura_active_user', JSON.stringify(fresh));
                 }
               } else {
                 setCurrentUser(null);
                 localStorage.removeItem('aura_active_user');
+                localStorage.removeItem('aura_session_token');
               }
             } catch (e) { }
           }
@@ -855,6 +878,26 @@ export default function App() {
           const mappedNotifs = notifsData.map(mapNotifFromDB);
           setNotifications(mappedNotifs);
           try { localStorage.setItem('aura_cached_notifications', JSON.stringify(mappedNotifs)); } catch (e) {}
+        }
+
+        // Verificar si la sesión de este usuario fue transferida a otro dispositivo
+        const savedUserJson = localStorage.getItem('aura_active_user');
+        const myLocalToken = localStorage.getItem('aura_session_token');
+        if (savedUserJson && myLocalToken) {
+          try {
+            const activeObj = JSON.parse(savedUserJson);
+            const { data: userCheck } = await supabase.from('users').select('id, subjects_detailed').eq('id', activeObj.id).maybeSingle();
+            if (userCheck) {
+              const mappedCheck = mapUserFromDB(userCheck);
+              if (mappedCheck.sessionToken && mappedCheck.sessionToken !== myLocalToken) {
+                setCurrentUser(null);
+                localStorage.removeItem('aura_active_user');
+                localStorage.removeItem('aura_session_token');
+                showToast('Tu sesión ha sido cerrada porque se inició sesión en otro dispositivo.', 'danger');
+                return;
+              }
+            }
+          } catch (eCheck) {}
         }
       }
     } catch (e) {
@@ -985,6 +1028,7 @@ export default function App() {
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoginError('');
+    setActiveSessionConflictUser(null);
     const cleanEmail = loginEmail.toLowerCase().trim();
 
     let targetUser = null;
@@ -1009,13 +1053,88 @@ export default function App() {
     if (targetUser.password !== loginPassword) return setLoginError('Contraseña incorrecta.');
     if (targetUser.status !== 'active') return setLoginError('Cuenta inactiva.');
 
-    setCurrentUser(targetUser);
+    // Verificación de sesión simultánea en otro dispositivo (5 minutos de inactividad)
+    const INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000;
+    const existingToken = targetUser.sessionToken;
+    const lastActive = Number(targetUser.sessionLastActive || 0);
+    const now = Date.now();
+    const isSessionActive = existingToken && (now - lastActive < INACTIVITY_TIMEOUT_MS);
+    const myLocalToken = localStorage.getItem('aura_session_token');
+
+    if (isSessionActive && existingToken !== myLocalToken) {
+      setLoginError('Sesión Activa: Esta cuenta ya tiene una sesión abierta en otro dispositivo. Por motivos de seguridad institucional, no se permite el acceso simultáneo.');
+      setActiveSessionConflictUser(targetUser);
+      return;
+    }
+
+    // Generar nuevo token único para este dispositivo
+    const newSessionToken = 'sess_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+    localStorage.setItem('aura_session_token', newSessionToken);
+    lastActivityRef.current = Date.now();
+
+    const loggedUser = {
+      ...targetUser,
+      sessionToken: newSessionToken,
+      sessionLastActive: Date.now()
+    };
+
+    // Actualizar token en Supabase
+    try {
+      await supabase.from('users').update({
+        subjects_detailed: [
+          ...(targetUser.subjectsDetailed || []).filter(s => !s || !s.__session),
+          { __session: true, token: newSessionToken, last_active: Date.now() }
+        ]
+      }).eq('id', targetUser.id);
+    } catch (eSes) {
+      console.error('Error registrando sesión única en Supabase:', eSes);
+    }
+
+    setCurrentUser(loggedUser);
+    setUsers(prev => prev.map(u => u.id === loggedUser.id ? loggedUser : u));
     setActiveTab('dashboard');
     setLoginEmail('');
     setLoginPassword('');
+    setActiveSessionConflictUser(null);
     loadDataFromSupabase(false);
-    await logAudit(targetUser.name, 'INICIO DE SESIÓN', `Acceso al sistema con rol ${targetUser.role}`);
+    await logAudit(targetUser.name, 'INICIO DE SESIÓN', `Acceso al sistema con rol ${targetUser.role} (Sesión única)`);
     showToast(`¡Bienvenido, ${targetUser.role === 'admin' ? 'Admin Global' : targetUser.name}!`);
+  };
+
+  const handleForceLogin = async () => {
+    if (!activeSessionConflictUser) return;
+    const targetUser = activeSessionConflictUser;
+    const newSessionToken = 'sess_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+    localStorage.setItem('aura_session_token', newSessionToken);
+    lastActivityRef.current = Date.now();
+
+    const loggedUser = {
+      ...targetUser,
+      sessionToken: newSessionToken,
+      sessionLastActive: Date.now()
+    };
+
+    try {
+      await supabase.from('users').update({
+        subjects_detailed: [
+          ...(targetUser.subjectsDetailed || []).filter(s => !s || !s.__session),
+          { __session: true, token: newSessionToken, last_active: Date.now() }
+        ]
+      }).eq('id', targetUser.id);
+    } catch (eSes) {
+      console.error('Error forzando sesión en Supabase:', eSes);
+    }
+
+    setCurrentUser(loggedUser);
+    setUsers(prev => prev.map(u => u.id === loggedUser.id ? loggedUser : u));
+    setActiveTab('dashboard');
+    setLoginEmail('');
+    setLoginPassword('');
+    setActiveSessionConflictUser(null);
+    setLoginError('');
+    loadDataFromSupabase(false);
+    await logAudit(targetUser.name, 'CIERRE DE SESIÓN REMOTA', 'Cerró la sesión remota en el otro dispositivo para acceder en este equipo');
+    showToast(`¡Sesión transferida! Bienvenido, ${targetUser.role === 'admin' ? 'Admin Global' : targetUser.name}.`);
   };
 
   const handleRegisterSuccess = async (newUser) => {
@@ -1035,11 +1154,12 @@ export default function App() {
     }
   };
 
-  const handleLogout = async () => {
-    const userName = currentUser?.name;
+  const handleLogout = async (reason = 'El usuario salió del sistema') => {
+    const userToLogout = currentUser;
     setCurrentUser(null);
     localStorage.removeItem('aura_active_user');
     localStorage.removeItem('aura_active_tab');
+    localStorage.removeItem('aura_session_token');
     setActiveTab('dashboard');
     setShowNotificationsModal(false);
     setActiveChatSession(null);
@@ -1048,11 +1168,64 @@ export default function App() {
     setPendingRequestToReview(null);
     setSessionToRate(null);
     setShowDeleteModal(false);
+    setActiveSessionConflictUser(null);
     showToast('Has cerrado sesión correctamente');
-    if (userName) {
-      await logAudit(userName, 'CIERRE DE SESIÓN', 'El usuario salió del sistema');
+
+    if (userToLogout) {
+      try {
+        await supabase.from('users').update({
+          subjects_detailed: (userToLogout.subjectsDetailed || []).filter(s => !s || !s.__session)
+        }).eq('id', userToLogout.id);
+      } catch (e) {}
+      await logAudit(userToLogout.name, 'CIERRE DE SESIÓN', reason);
     }
   };
+
+  // Control de inactividad por 5 minutos y sincronización de actividad en la base de datos
+  useEffect(() => {
+    if (!currentUser) return;
+
+    lastActivityRef.current = Date.now();
+
+    const handleUserActivity = () => {
+      lastActivityRef.current = Date.now();
+    };
+
+    const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'];
+    events.forEach(evt => window.addEventListener(evt, handleUserActivity, { passive: true }));
+
+    const inactivityInterval = setInterval(async () => {
+      const now = Date.now();
+      const elapsed = now - lastActivityRef.current;
+      const INACTIVITY_LIMIT = 5 * 60 * 1000; // 5 minutos exactos
+
+      if (elapsed >= INACTIVITY_LIMIT) {
+        clearInterval(inactivityInterval);
+        await handleLogout('Cierre automático de sesión por inactividad tras 5 minutos sin uso');
+        showToast('Tu sesión ha expirado automáticamente tras 5 minutos de inactividad.', 'warning');
+        return;
+      }
+
+      // Si ha pasado más de 1 minuto desde el último pulso en BD, refrescar last_active en Supabase
+      const localToken = localStorage.getItem('aura_session_token');
+      if (localToken && now - (currentUser.sessionLastActive || 0) > 60000) {
+        currentUser.sessionLastActive = now;
+        try {
+          await supabase.from('users').update({
+            subjects_detailed: [
+              ...(currentUser.subjectsDetailed || []).filter(s => !s || !s.__session),
+              { __session: true, token: localToken, last_active: now }
+            ]
+          }).eq('id', currentUser.id);
+        } catch (ePulse) {}
+      }
+    }, 5000);
+
+    return () => {
+      events.forEach(evt => window.removeEventListener(evt, handleUserActivity));
+      clearInterval(inactivityInterval);
+    };
+  }, [currentUser]);
 
   const handleDeleteAccount = async () => {
     if (deleteConfirmText !== 'ELIMINAR') {
@@ -3893,13 +4066,44 @@ export default function App() {
 
             {activeTab === 'admin_academic' && currentUser.role === 'admin' && (
               <div className="space-y-6">
+                {/* TARJETAS DE MÉTRICAS GENERALES DEL CATÁLOGO ACADÉMICO */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-4">
+                  <div className="bg-white p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-xs flex items-center space-x-3.5">
+                    <div className="p-3 rounded-2xl bg-blue-50 text-blue-600 shrink-0">
+                      <BookOpen className="w-5 h-5 sm:w-6 sm:h-6" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block truncate">Carreras Registradas</span>
+                      <span className="text-xl sm:text-2xl font-black text-slate-900">{careers.length}</span>
+                    </div>
+                  </div>
+                  <div className="bg-white p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-xs flex items-center space-x-3.5">
+                    <div className="p-3 rounded-2xl bg-purple-50 text-purple-600 shrink-0">
+                      <Layers className="w-5 h-5 sm:w-6 sm:h-6" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block truncate">Materias en Catálogo</span>
+                      <span className="text-xl sm:text-2xl font-black text-slate-900">{catalogSubjects.length}</span>
+                    </div>
+                  </div>
+                  <div className="bg-white p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-xs flex items-center space-x-3.5">
+                    <div className="p-3 rounded-2xl bg-emerald-50 text-emerald-600 shrink-0">
+                      <Users className="w-5 h-5 sm:w-6 sm:h-6" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block truncate">Tutores Docentes</span>
+                      <span className="text-xl sm:text-2xl font-black text-slate-900">{users.filter(u => u.role === 'tutor').length}</span>
+                    </div>
+                  </div>
+                </div>
+
                 {/* ENCABEZADO Y ACCIONES DE IMPORTACIÓN / EXPORTACIÓN DE PENSUM */}
-                <div className="bg-white p-6 rounded-3xl border shadow-sm flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+                <div className="bg-white p-5 sm:p-6 rounded-2xl sm:rounded-3xl border shadow-sm flex flex-col md:flex-row md:justify-between md:items-center gap-4">
                   <div>
-                    <h2 className="text-xl font-black text-slate-800">RFADM02 - Catálogo Académico y Pensum</h2>
+                    <h2 className="text-lg sm:text-xl font-black text-slate-800">RFADM02 - Catálogo Académico y Pensum</h2>
                     <p className="text-xs text-slate-500 mt-0.5">Gestión integral de carreras, semestres, materias y asignación de tutores.</p>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="grid grid-cols-1 sm:flex sm:flex-wrap items-center gap-2 w-full md:w-auto">
                     <input
                       type="file"
                       ref={pensumImportInputRef}
@@ -3909,7 +4113,7 @@ export default function App() {
                     />
                     <button
                       onClick={() => pensumImportInputRef.current?.click()}
-                      className="px-3.5 py-2.5 bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 font-bold text-xs rounded-xl flex items-center space-x-1.5 transition shadow-xs"
+                      className="w-full sm:w-auto px-4 py-2.5 bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 font-bold text-xs sm:text-sm rounded-xl flex items-center justify-center space-x-1.5 transition shadow-xs"
                       title="Importa un archivo CSV con el pensum para integrar carreras y materias automáticamente"
                     >
                       <Upload className="w-4 h-4" />
@@ -3918,7 +4122,7 @@ export default function App() {
 
                     <button
                       onClick={handleExportPensumCSV}
-                      className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl flex items-center space-x-1.5 transition shadow-xs"
+                      className="w-full sm:w-auto px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs sm:text-sm rounded-xl flex items-center justify-center space-x-1.5 transition shadow-xs"
                       title="Descarga el pensum académico actual con todas sus carreras y materias"
                     >
                       <Download className="w-4 h-4" />
@@ -3927,7 +4131,7 @@ export default function App() {
 
                     <button
                       onClick={handleDownloadPensumTemplate}
-                      className="px-3 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 font-semibold text-xs rounded-xl flex items-center space-x-1 transition"
+                      className="w-full sm:w-auto px-3.5 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 font-semibold text-xs sm:text-sm rounded-xl flex items-center justify-center space-x-1 transition"
                       title="Descarga una plantilla de ejemplo para importar pensums"
                     >
                       <FileSpreadsheet className="w-3.5 h-3.5" />
@@ -3937,7 +4141,7 @@ export default function App() {
                 </div>
 
                 {/* FILTROS DE BÚSQUEDA */}
-                <div className="bg-white p-5 rounded-3xl border shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-white p-4 sm:p-5 rounded-2xl sm:rounded-3xl border shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                   <div>
                     <label className="block text-xs font-bold uppercase text-slate-600 mb-1.5">Filtrar por Carrera</label>
                     <select
@@ -3960,6 +4164,7 @@ export default function App() {
                       <option value="">Todas las materias</option>
                       {Array.from(new Set([
                         ...catalogSubjects.map(s => s.name),
+                        ...sessions.map(ses => ses.subject).filter(Boolean),
                         ...users.filter(u => u.role === 'tutor' && u.subjectsDetailed).flatMap(u => u.subjectsDetailed.map(sd => sd.name))
                       ]))
                         .sort((a, b) => a.localeCompare(b))
@@ -3973,7 +4178,7 @@ export default function App() {
                       <Search className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
                       <input
                         type="text"
-                        placeholder="Escribe el nombre..."
+                        placeholder="Escribe el nombre del tutor..."
                         value={filterTutorText}
                         onChange={(e) => setFilterTutorText(e.target.value)}
                         className="w-full pl-9 pr-3.5 py-3 border rounded-xl text-sm font-medium text-slate-700"
@@ -3983,7 +4188,7 @@ export default function App() {
                 </div>
 
                 {(filterCareer || filterSubject || filterTutorText) && (
-                  <div className="flex items-center justify-between bg-slate-100 border border-slate-200 px-5 py-3 rounded-2xl text-sm">
+                  <div className="flex items-center justify-between bg-slate-100 border border-slate-200 px-4 sm:px-5 py-2.5 sm:py-3 rounded-2xl text-xs sm:text-sm">
                     <span className="font-bold text-slate-700">Filtros activos aplicados</span>
                     <button
                       onClick={() => { setFilterCareer(''); setFilterSubject(''); setFilterTutorText(''); }}
@@ -3997,53 +4202,81 @@ export default function App() {
                 {/* CONTENIDO PRINCIPAL: LISTA DE CARRERAS Y FORMULARIOS */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   {/* COLUMNA IZQUIERDA: CARRERAS, MATERIAS Y PENSUM */}
-                  <div className="lg:col-span-2 bg-white p-6 rounded-3xl border shadow-sm space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-bold text-lg text-slate-800">Carreras y Materias Registradas</h3>
-                      <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+                  <div className="lg:col-span-2 bg-white p-4 sm:p-6 rounded-2xl sm:rounded-3xl border shadow-sm space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 pb-2 border-b">
+                      <h3 className="font-bold text-base sm:text-lg text-slate-800">Carreras y Materias Registradas</h3>
+                      <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1 rounded-full self-start sm:self-auto">
                         {careers.length} carreras en el sistema
                       </span>
                     </div>
 
-                    <div className="space-y-3">
+                    <div className="space-y-3.5">
                       {careers.filter(c => filterCareer ? c.name === filterCareer : true).map(c => {
                         const isExpanded = expandedCareerId === c.id;
+                        const targetCareerClean = c.name.trim().toLowerCase();
+
+                        // 1. Obtener todos los tutores asignados a esta carrera
                         const tutorsInCareer = users.filter(u => {
+                          if (u.role !== 'tutor') return false;
                           const matchesTutorText = filterTutorText ? u.name.toLowerCase().includes(filterTutorText.toLowerCase().trim()) : true;
-                          const hasSubjectInThisCareer = u.role === 'tutor' && (
-                            (u.subjectsDetailed || []).some(sd => sd.career?.toLowerCase() === c.name.toLowerCase()) ||
-                            catalogSubjects.some(sub => sub.career?.toLowerCase() === c.name.toLowerCase() && (sub.tutorIds || []).includes(u.id))
-                          );
-                          return matchesTutorText && hasSubjectInThisCareer;
+                          if (!matchesTutorText) return false;
+
+                          const userCareerClean = (u.career || '').trim().toLowerCase();
+                          const isDirectCareer = userCareerClean === targetCareerClean;
+                          const hasSubjectDetail = (u.subjectsDetailed || []).some(sd => (sd.career || '').trim().toLowerCase() === targetCareerClean);
+                          const hasCatalogSub = catalogSubjects.some(sub => (sub.career || '').trim().toLowerCase() === targetCareerClean && (sub.tutorIds || []).includes(u.id));
+                          const hasSessionInCareer = sessions.some(ses => {
+                            if (ses.tutorId !== u.id) return false;
+                            const catMatch = catalogSubjects.find(cs => cs.name?.toLowerCase() === ses.subject?.toLowerCase());
+                            return (catMatch && catMatch.career?.toLowerCase() === targetCareerClean) || (ses.career?.toLowerCase() === targetCareerClean);
+                          });
+
+                          return isDirectCareer || hasSubjectDetail || hasCatalogSub || hasSessionInCareer;
                         });
 
-                        // Unificar materias registradas en pensum y asociadas a tutores
+                        // 2. Unificar materias registradas en pensum, tutores y sesiones
                         const subjectMap = new Map();
-                        // 1. Materias del catálogo
-                        catalogSubjects.filter(s => s.career?.toLowerCase() === c.name.toLowerCase()).forEach(s => {
+
+                        // A. Materias del catálogo de esta carrera
+                        catalogSubjects.filter(s => s.career?.toLowerCase() === targetCareerClean).forEach(s => {
                           const matchesSubFilter = filterSubject ? s.name === filterSubject : true;
                           if (matchesSubFilter) {
-                            const sessionCount = sessions.filter(ses => ses.subject === s.name).length;
+                            const sessionCount = sessions.filter(ses => ses.subject?.toLowerCase() === s.name.toLowerCase()).length;
+                            // Tutores que han creado o impartido tutorías de esta materia
+                            const sessionTutors = sessions
+                              .filter(ses => ses.subject?.toLowerCase() === s.name.toLowerCase() && ses.tutorId)
+                              .map(ses => ses.tutorId);
+
+                            // Tutores de esta carrera asignados por catálogo
+                            const catalogTutors = Array.isArray(s.tutorIds) ? s.tutorIds : [];
+
+                            // Tutores cuya carrera directa es esta y tienen registrada la materia
+                            const careerDirectTutors = users
+                              .filter(u => u.role === 'tutor' && (u.career || '').toLowerCase() === targetCareerClean && Array.isArray(u.subjects) && u.subjects.some(subName => subName.toLowerCase() === s.name.toLowerCase()))
+                              .map(u => u.id);
+
+                            const mergedTutorIds = Array.from(new Set([...catalogTutors, ...sessionTutors, ...careerDirectTutors]));
+
                             subjectMap.set(s.name.toLowerCase(), {
                               id: s.id,
                               name: s.name,
                               semester: s.semester || 1,
                               sessionsCount: sessionCount,
-                              tutorIds: [...(s.tutorIds || [])]
+                              tutorIds: mergedTutorIds
                             });
                           }
                         });
 
-                        // 2. Materias detalladas de tutores
-                        users.filter(u => u.role === 'tutor' && u.subjectsDetailed).forEach(t => {
+                        // B. Materias detalladas de tutores
+                        users.filter(u => u.role === 'tutor' && Array.isArray(u.subjectsDetailed)).forEach(t => {
                           const matchesTutorText = filterTutorText ? t.name.toLowerCase().includes(filterTutorText.toLowerCase().trim()) : true;
                           if (matchesTutorText) {
                             t.subjectsDetailed.forEach(sd => {
-                              if (sd.career?.toLowerCase() === c.name.toLowerCase()) {
+                              if ((sd.career || '').toLowerCase() === targetCareerClean) {
                                 const matchesSubFilter = filterSubject ? sd.name === filterSubject : true;
                                 if (matchesSubFilter) {
                                   const key = sd.name.toLowerCase();
-                                  const sessionCount = sessions.filter(ses => ses.subject === sd.name).length;
+                                  const sessionCount = sessions.filter(ses => ses.subject?.toLowerCase() === sd.name.toLowerCase()).length;
                                   if (!subjectMap.has(key)) {
                                     subjectMap.set(key, {
                                       id: sd.id || `sub_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
@@ -4064,6 +4297,42 @@ export default function App() {
                           }
                         });
 
+                        // C. Materias y tutores procedentes de sesiones/ofertas de tutorías en esta carrera
+                        sessions.forEach(ses => {
+                          if (!ses.subject) return;
+                          const tutorObj = users.find(u => u.id === ses.tutorId);
+                          const tutorCareer = (tutorObj?.career || '').trim().toLowerCase();
+                          const sessionCareer = (ses.career || '').trim().toLowerCase();
+                          const isSubjectInCatalog = catalogSubjects.some(cs => cs.name.toLowerCase() === ses.subject.toLowerCase() && cs.career?.toLowerCase() === targetCareerClean);
+
+                          if (tutorCareer === targetCareerClean || sessionCareer === targetCareerClean || isSubjectInCatalog) {
+                            const matchesSubFilter = filterSubject ? ses.subject === filterSubject : true;
+                            const matchesTutorText = filterTutorText && tutorObj ? tutorObj.name.toLowerCase().includes(filterTutorText.toLowerCase().trim()) : true;
+
+                            if (matchesSubFilter && matchesTutorText) {
+                              const key = ses.subject.toLowerCase();
+                              const catalogMatch = catalogSubjects.find(cs => cs.name.toLowerCase() === key && cs.career?.toLowerCase() === targetCareerClean);
+                              const semester = catalogMatch?.semester || 1;
+                              const sessionCount = sessions.filter(s => s.subject?.toLowerCase() === ses.subject.toLowerCase()).length;
+
+                              if (!subjectMap.has(key)) {
+                                subjectMap.set(key, {
+                                  id: catalogMatch?.id || `sub_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+                                  name: ses.subject,
+                                  semester: semester,
+                                  sessionsCount: sessionCount,
+                                  tutorIds: ses.tutorId ? [ses.tutorId] : []
+                                });
+                              } else {
+                                const item = subjectMap.get(key);
+                                if (ses.tutorId && !item.tutorIds.includes(ses.tutorId)) {
+                                  item.tutorIds.push(ses.tutorId);
+                                }
+                              }
+                            }
+                          }
+                        });
+
                         const careerSubjects = Array.from(subjectMap.values()).sort((a, b) => {
                           if (a.semester !== b.semester) return a.semester - b.semester;
                           return a.name.localeCompare(b.name);
@@ -4073,21 +4342,21 @@ export default function App() {
                         const maxSemestersForThisCareer = careerSemestersConfig[c.name] || 6;
 
                         return (
-                          <div key={c.id} className="border rounded-2xl bg-slate-50 overflow-hidden transition shadow-xs">
+                          <div key={c.id} className="border border-slate-200/90 rounded-2xl sm:rounded-3xl bg-slate-50 overflow-hidden transition shadow-2xs hover:shadow-xs">
                             <div
                               onClick={() => setExpandedCareerId(isExpanded ? null : c.id)}
-                              className="p-4.5 flex justify-between items-center cursor-pointer hover:bg-slate-100 transition"
+                              className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer hover:bg-slate-100/80 transition"
                             >
-                              <div className="flex items-center space-x-3">
-                                {isExpanded ? <ChevronDown className="w-5 h-5 text-slate-600" /> : <ChevronRight className="w-5 h-5 text-slate-400" />}
-                                <div>
-                                  <span className="font-bold text-base text-slate-800 block">{c.name}</span>
-                                  <span className="text-xs text-slate-500">
-                                    {careerSubjects.length} materia(s) en pensum • {tutorsInCareer.length} tutor(es) coinciden
+                              <div className="flex items-center space-x-3 min-w-0">
+                                {isExpanded ? <ChevronDown className="w-5 h-5 text-slate-700 shrink-0" /> : <ChevronRight className="w-5 h-5 text-slate-400 shrink-0" />}
+                                <div className="min-w-0">
+                                  <span className="font-bold text-base text-slate-900 block truncate">{c.name}</span>
+                                  <span className="text-xs text-slate-500 block truncate mt-0.5">
+                                    {careerSubjects.length} materia(s) en pensum • <strong className="text-slate-800 font-bold">{tutorsInCareer.length} tutor(es) asignado(s)</strong>
                                   </span>
                                 </div>
                               </div>
-                              <div className="flex items-center space-x-2">
+                              <div className="flex items-center justify-between sm:justify-end space-x-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-200/50">
                                 <span className="font-black px-2.5 py-1 bg-white border rounded-xl shadow-xs text-xs" style={{ color: primaryColor }}>
                                   {c.code}
                                 </span>
@@ -4107,14 +4376,14 @@ export default function App() {
                             </div>
 
                             {isExpanded && (
-                              <div className="p-4.5 bg-white border-t space-y-4">
-                                <div className="flex justify-between items-center pb-2 border-b">
+                              <div className="p-4 sm:p-5 bg-white border-t space-y-4">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b gap-1">
                                   <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center space-x-1.5">
-                                    <Layers className="w-4 h-4 text-slate-400" />
+                                    <Layers className="w-4 h-4 text-slate-400 shrink-0" />
                                     <span>Pensum Académico por Semestres</span>
                                   </h4>
                                   <span className="text-xs font-bold text-slate-500">
-                                    Total: {careerSubjects.length} materia(s)
+                                    Total: {careerSubjects.length} materia(s) • {tutorsInCareer.length} tutor(es) en carrera
                                   </span>
                                 </div>
 
@@ -4125,15 +4394,15 @@ export default function App() {
                                       if (subjectsInSem.length === 0) return null;
 
                                       return (
-                                        <div key={semNum} className="space-y-2">
+                                        <div key={semNum} className="space-y-2.5">
                                           <div className="flex items-center space-x-2">
-                                            <span className="text-xs font-black uppercase px-2.5 py-0.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200">
+                                            <span className="text-xs font-black uppercase px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200">
                                               Semestre {semNum}
                                             </span>
                                             <div className="h-px bg-slate-200 flex-1"></div>
                                           </div>
 
-                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-3.5">
                                             {subjectsInSem.map((item) => {
                                               const assignedTutors = (item.tutorIds || [])
                                                 .map(tid => users.find(u => u.id === tid))
@@ -4142,40 +4411,55 @@ export default function App() {
                                               return (
                                                 <div
                                                   key={item.id}
-                                                  className="p-3.5 rounded-xl border bg-slate-50/80 hover:bg-slate-50 transition flex flex-col justify-between text-sm space-y-2 relative group shadow-xs"
+                                                  className="p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 bg-white sm:bg-slate-50/80 hover:bg-slate-50 transition flex flex-col justify-between text-sm space-y-3 shadow-2xs group"
                                                 >
                                                   <div className="flex items-start justify-between gap-2">
-                                                    <span className="font-bold text-slate-900 leading-tight">{item.name}</span>
+                                                    <span className="font-bold text-slate-900 text-sm leading-snug">{item.name}</span>
                                                     <button
                                                       type="button"
                                                       onClick={() => handleDeleteSubjectFromCatalog(item.id, item.name, c.name)}
-                                                      className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition shrink-0"
+                                                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                                                       title="Eliminar materia del catálogo"
                                                     >
-                                                      <Trash2 className="w-3.5 h-3.5" />
+                                                      <Trash2 className="w-4 h-4" />
                                                     </button>
                                                   </div>
 
-                                                  <div className="pt-2 border-t border-slate-200/60 space-y-1.5 text-xs">
+                                                  <div className="pt-2.5 border-t border-slate-100 space-y-2 text-xs">
                                                     <div className="flex items-center justify-between text-slate-600">
-                                                      <span>Tutorías reservadas:</span>
-                                                      <strong style={{ color: primaryColor }}>{item.sessionsCount}</strong>
+                                                      <span className="font-medium">Tutorías registradas:</span>
+                                                      <span className="font-bold px-2 py-0.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 text-[11px]">
+                                                        {item.sessionsCount} clase(s)
+                                                      </span>
                                                     </div>
-                                                    <div className="flex flex-col gap-1">
-                                                      <span className="text-[11px] font-semibold text-slate-500">Tutores asignados:</span>
+
+                                                    <div className="space-y-1.5">
+                                                      <div className="flex items-center justify-between">
+                                                        <span className="text-[11px] font-bold text-slate-600">Tutores asignados:</span>
+                                                        <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                                                          {assignedTutors.length} docente(s)
+                                                        </span>
+                                                      </div>
                                                       {assignedTutors.length > 0 ? (
-                                                        <div className="flex flex-wrap gap-1">
+                                                        <div className="flex flex-wrap gap-1.5 pt-0.5">
                                                           {assignedTutors.map(tut => (
                                                             <span
                                                               key={tut.id}
-                                                              className="inline-flex items-center px-2 py-0.5 rounded-md bg-white border border-slate-200 text-[11px] font-medium text-slate-700"
+                                                              className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-xl bg-slate-50 sm:bg-white border border-slate-200 text-xs font-semibold text-slate-800 shadow-2xs"
                                                             >
-                                                              {tut.name}
+                                                              <div className="w-4 h-4 rounded-full overflow-hidden bg-slate-200 shrink-0">
+                                                                {tut.avatar ? (
+                                                                  <img src={tut.avatar} alt={tut.name} className="w-full h-full object-cover" />
+                                                                ) : (
+                                                                  <User className="w-3 h-3 text-slate-500 m-auto mt-0.5" />
+                                                                )}
+                                                              </div>
+                                                              <span className="truncate max-w-[130px]">{tut.name}</span>
                                                             </span>
                                                           ))}
                                                         </div>
                                                       ) : (
-                                                        <span className="text-[11px] text-slate-400 italic">Sin tutores asignados aún</span>
+                                                        <p className="text-[11px] text-slate-400 italic">Sin tutores asignados aún a esta materia</p>
                                                       )}
                                                     </div>
                                                   </div>
@@ -5847,9 +6131,29 @@ export default function App() {
                 </div>
 
                 {loginError && (
-                  <div className="bg-red-50 text-red-700 text-sm font-bold p-3.5 rounded-xl border border-red-200 flex items-center space-x-2">
-                    <AlertCircle className="w-4.5 h-4.5 shrink-0" />
-                    <span>{loginError}</span>
+                  <div className="bg-red-50 text-red-700 text-sm font-bold p-3.5 rounded-xl border border-red-200 flex items-start space-x-2">
+                    <AlertCircle className="w-4.5 h-4.5 shrink-0 mt-0.5" />
+                    <span className="leading-snug">{loginError}</span>
+                  </div>
+                )}
+
+                {activeSessionConflictUser && (
+                  <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 space-y-2.5 text-xs shadow-xs">
+                    <div className="flex items-center space-x-2 font-black text-amber-800 text-sm">
+                      <AlertTriangle className="w-4.5 h-4.5 text-amber-600 shrink-0" />
+                      <span>Sesión activa detectada en otro dispositivo</span>
+                    </div>
+                    <p className="text-amber-800 leading-relaxed font-medium">
+                      Esta cuenta ya tiene una sesión abierta en otro celular o equipo. Si no tienes acceso a ese dispositivo o lo dejaste abierto, puedes cerrar la sesión remota para acceder en este equipo:
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleForceLogin}
+                      className="w-full py-2.5 px-3 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl transition shadow-xs text-xs flex items-center justify-center space-x-1.5"
+                    >
+                      <ShieldAlert className="w-4 h-4" />
+                      <span>Cerrar sesión en el otro equipo e ingresar aquí</span>
+                    </button>
                   </div>
                 )}
 
