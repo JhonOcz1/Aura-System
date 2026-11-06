@@ -621,7 +621,9 @@ export default function App() {
   });
   const [currentUser, setCurrentUser] = useState(() => {
     try {
-      const saved = localStorage.getItem('aura_active_user');
+      // JhonOcz - La sesión activa se gestiona en sessionStorage para cerrarse automáticamente al cerrar la pestaña
+      localStorage.removeItem('aura_active_user'); // Limpiar residuos permanentes anteriores
+      const saved = sessionStorage.getItem('aura_active_user');
       return saved ? JSON.parse(saved) : null;
     } catch (e) {
       return null;
@@ -630,18 +632,18 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState(() => {
     try {
-      const savedTab = localStorage.getItem('aura_active_tab');
+      const savedTab = sessionStorage.getItem('aura_active_tab');
       return savedTab || 'dashboard';
     } catch (e) {
       return 'dashboard';
     }
   });
 
-  // Persistir la pestaña activa en recargas de página
+  // Persistir la pestaña activa durante la sesión en esta pestaña (sobrevive a recargas F5)
   useEffect(() => {
     try {
       if (activeTab) {
-        localStorage.setItem('aura_active_tab', activeTab);
+        sessionStorage.setItem('aura_active_tab', activeTab);
       }
     } catch (e) {}
   }, [activeTab]);
@@ -825,7 +827,7 @@ export default function App() {
           setUsers(mappedUsers);
           try { localStorage.setItem('aura_cached_users', JSON.stringify(mappedUsers)); } catch (e) {}
 
-          const savedActive = localStorage.getItem('aura_active_user');
+          const savedActive = sessionStorage.getItem('aura_active_user');
           if (savedActive) {
             try {
               const activeObj = JSON.parse(savedActive);
@@ -833,25 +835,25 @@ export default function App() {
               if (fresh) {
                 if (fresh.status !== 'active') {
                   setCurrentUser(null);
-                  localStorage.removeItem('aura_active_user');
-                  localStorage.removeItem('aura_session_token');
+                  sessionStorage.removeItem('aura_active_user');
+                  sessionStorage.removeItem('aura_session_token');
                 } else {
                   // Verificar validez del token de sesión única en este equipo
-                  const myLocalToken = localStorage.getItem('aura_session_token');
+                  const myLocalToken = sessionStorage.getItem('aura_session_token');
                   if (fresh.sessionToken && myLocalToken && fresh.sessionToken !== myLocalToken) {
                     setCurrentUser(null);
-                    localStorage.removeItem('aura_active_user');
-                    localStorage.removeItem('aura_session_token');
+                    sessionStorage.removeItem('aura_active_user');
+                    sessionStorage.removeItem('aura_session_token');
                     showToast('Tu sesión ha sido cerrada porque se inició sesión en otro dispositivo.', 'danger');
                     return;
                   }
                   setCurrentUser(fresh);
-                  localStorage.setItem('aura_active_user', JSON.stringify(fresh));
+                  sessionStorage.setItem('aura_active_user', JSON.stringify(fresh));
                 }
               } else {
                 setCurrentUser(null);
-                localStorage.removeItem('aura_active_user');
-                localStorage.removeItem('aura_session_token');
+                sessionStorage.removeItem('aura_active_user');
+                sessionStorage.removeItem('aura_session_token');
               }
             } catch (e) { }
           }
@@ -948,8 +950,8 @@ export default function App() {
         }
 
         // Verificar si la sesión de este usuario fue transferida a otro dispositivo
-        const savedUserJson = localStorage.getItem('aura_active_user');
-        const myLocalToken = localStorage.getItem('aura_session_token');
+        const savedUserJson = sessionStorage.getItem('aura_active_user');
+        const myLocalToken = sessionStorage.getItem('aura_session_token');
         if (savedUserJson && myLocalToken) {
           try {
             const activeObj = JSON.parse(savedUserJson);
@@ -958,8 +960,8 @@ export default function App() {
               const mappedCheck = mapUserFromDB(userCheck);
               if (mappedCheck.sessionToken && mappedCheck.sessionToken !== myLocalToken) {
                 setCurrentUser(null);
-                localStorage.removeItem('aura_active_user');
-                localStorage.removeItem('aura_session_token');
+                sessionStorage.removeItem('aura_active_user');
+                sessionStorage.removeItem('aura_session_token');
                 showToast('Tu sesión ha sido cerrada porque se inició sesión en otro dispositivo.', 'danger');
                 return;
               }
@@ -1040,7 +1042,7 @@ export default function App() {
   const updateUserInDB = async (updatedUser, successMsg = 'Cambios sincronizados con la base de datos') => {
     setCurrentUser(updatedUser);
     setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
-    localStorage.setItem('aura_active_user', JSON.stringify(updatedUser));
+    sessionStorage.setItem('aura_active_user', JSON.stringify(updatedUser));
 
     try {
       const { error } = await supabase.from('users').upsert(mapUserToDB(updatedUser));
@@ -1060,9 +1062,10 @@ export default function App() {
 
   useEffect(() => {
     if (currentUser) {
-      localStorage.setItem('aura_active_user', JSON.stringify(currentUser));
+      sessionStorage.setItem('aura_active_user', JSON.stringify(currentUser));
     } else {
-      localStorage.removeItem('aura_active_user');
+      sessionStorage.removeItem('aura_active_user');
+      sessionStorage.removeItem('aura_session_token');
     }
   }, [currentUser]);
 
@@ -1141,7 +1144,7 @@ export default function App() {
     const lastActive = Number(targetUser.sessionLastActive || 0);
     const now = Date.now();
     const isSessionActive = existingToken && (now - lastActive < INACTIVITY_TIMEOUT_MS);
-    const myLocalToken = localStorage.getItem('aura_session_token');
+    const myLocalToken = sessionStorage.getItem('aura_session_token');
 
     if (isSessionActive && existingToken !== myLocalToken) {
       setLoginError('Sesión Activa: Esta cuenta ya tiene una sesión abierta en otro dispositivo. Por motivos de seguridad institucional, no se permite el acceso simultáneo.');
@@ -1151,7 +1154,7 @@ export default function App() {
 
     // Generar nuevo token único para este dispositivo
     const newSessionToken = 'sess_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
-    localStorage.setItem('aura_session_token', newSessionToken);
+    sessionStorage.setItem('aura_session_token', newSessionToken);
     lastActivityRef.current = Date.now();
 
     const loggedUser = {
@@ -1187,7 +1190,7 @@ export default function App() {
     if (!activeSessionConflictUser) return;
     const targetUser = activeSessionConflictUser;
     const newSessionToken = 'sess_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
-    localStorage.setItem('aura_session_token', newSessionToken);
+    sessionStorage.setItem('aura_session_token', newSessionToken);
     lastActivityRef.current = Date.now();
 
     const loggedUser = {
@@ -1239,6 +1242,9 @@ export default function App() {
   const handleLogout = async (reason = 'El usuario salió del sistema') => {
     const userToLogout = currentUser;
     setCurrentUser(null);
+    sessionStorage.removeItem('aura_active_user');
+    sessionStorage.removeItem('aura_active_tab');
+    sessionStorage.removeItem('aura_session_token');
     localStorage.removeItem('aura_active_user');
     localStorage.removeItem('aura_active_tab');
     localStorage.removeItem('aura_session_token');
@@ -1289,7 +1295,7 @@ export default function App() {
       }
 
       // Si ha pasado más de 1 minuto desde el último pulso en BD, refrescar last_active en Supabase
-      const localToken = localStorage.getItem('aura_session_token');
+      const localToken = sessionStorage.getItem('aura_session_token');
       if (localToken && now - (currentUser.sessionLastActive || 0) > 60000) {
         currentUser.sessionLastActive = now;
         try {
@@ -1327,7 +1333,10 @@ export default function App() {
       await logAudit(userName, 'ELIMINACIÓN DE CUENTA', `El usuario eliminó permanentemente su cuenta (${userEmail})`);
       setUsers(prev => prev.filter(u => u.id !== userId));
       setCurrentUser(null);
+      sessionStorage.removeItem('aura_active_user');
+      sessionStorage.removeItem('aura_session_token');
       localStorage.removeItem('aura_active_user');
+      localStorage.removeItem('aura_session_token');
       setShowDeleteModal(false);
       setDeleteConfirmText('');
       showToast('Tu cuenta ha sido eliminada por completo del sistema.');
