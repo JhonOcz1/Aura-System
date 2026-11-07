@@ -7260,7 +7260,8 @@ export default function App() {
           {/* Fila Clásica de Derechos y Autores */}
           <div className="flex flex-col md:flex-row items-center justify-between gap-2.5 text-center md:text-left text-[11px] text-slate-500 dark:text-slate-400">
             <div>
-              &copy; {new Date().getFullYear()} <strong className="text-slate-700 dark:text-slate-300 font-bold">AURA Estudiantil</strong>. Todos los derechos reservados.
+              <p>&copy; {new Date().getFullYear()} <strong className="text-slate-700 dark:text-slate-300 font-bold">AURA Estudiantil</strong>. Todos los derechos reservados.</p>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 font-medium mt-0.5">Jhonny ocariz 31.170.619</p>
             </div>
             <div className="flex flex-wrap justify-center md:justify-end items-center gap-x-2 gap-y-1">
               <span className="font-bold text-slate-700 dark:text-slate-300">Autores:</span>
