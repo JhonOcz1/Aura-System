@@ -3611,10 +3611,10 @@ export default function App() {
 
       {/* HEADER DINÁMICO */}
       <header className="text-white border-b border-black/10 sticky top-0 z-40 shadow-md transition-colors duration-300" style={{ backgroundColor: primaryColor }}>
-        <div className="max-w-7xl mx-auto px-2 sm:px-4 min-h-16 py-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="max-w-7xl mx-auto px-2 sm:px-4 h-14 sm:h-16 flex items-center justify-between gap-1.5 sm:gap-2">
 
           {/* SECCIÓN DEL LOGO Y TÍTULO CON BOTÓN SIDE VAR A LA IZQUIERDA */}
-          <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
+          <div className="flex items-center space-x-1.5 sm:space-x-3 min-w-0">
             {currentUser && (
               <button
                 type="button"
@@ -3648,12 +3648,12 @@ export default function App() {
           </div>
 
           {/* SECCIÓN DE BOTONES DE USUARIO Y CONTROLES */}
-          <div className="flex items-center space-x-2 sm:space-x-3 shrink-0 flex-wrap">
+          <div className="flex items-center space-x-1.5 sm:space-x-3 shrink-0">
             {/* BOTÓN MODO OSCURO / MODO CLARO */}
             <button
               type="button"
               onClick={toggleDarkMode}
-              className="p-1.5 sm:p-2 text-white/95 hover:text-white hover:bg-white/15 active:scale-95 rounded-xl transition-all flex items-center justify-center border border-white/25 shadow-xs backdrop-blur-sm cursor-pointer"
+              className="p-1.5 sm:p-2 text-white/95 hover:text-white hover:bg-white/15 active:scale-95 rounded-xl transition-all flex items-center justify-center border border-white/25 shadow-xs backdrop-blur-sm cursor-pointer shrink-0"
               title={isDarkMode ? "Cambiar a Modo Claro" : "Cambiar a Modo Oscuro"}
               aria-label="Alternar modo claro / oscuro"
             >
@@ -3670,15 +3670,18 @@ export default function App() {
             {currentUser && (
               <>
                 {/* ROL EN LA BARRA SUPERIOR (ARRIBA) */}
-                <div className="flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 rounded-full bg-white/20 border border-white/30 text-white shadow-xs backdrop-blur-sm" title={`Tu rol activo: ${currentUser.role === 'admin' ? 'Super Administrador' : currentUser.role === 'tutor' ? 'Tutor Docente' : 'Estudiante Universitario'}`}>
+                <div className="flex items-center space-x-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full bg-white/20 border border-white/30 text-white shadow-xs backdrop-blur-sm shrink-0" title={`Tu rol activo: ${currentUser.role === 'admin' ? 'Super Administrador' : currentUser.role === 'tutor' ? 'Tutor Docente' : 'Estudiante Universitario'}`}>
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
-                  <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider">
+                  <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider hidden sm:inline">
                     {currentUser.role === 'admin' ? 'Super Administrador' : currentUser.role === 'tutor' ? 'Tutor' : 'Estudiante'}
+                  </span>
+                  <span className="text-[10px] font-black uppercase tracking-wider sm:hidden">
+                    {currentUser.role === 'admin' ? 'Admin' : currentUser.role === 'tutor' ? 'Tutor' : 'Estudiante'}
                   </span>
                 </div>
 
                 {currentUser.role !== 'admin' && (
-                  <button onClick={() => setShowNotificationsModal(true)} className="relative p-1.5 sm:p-2 text-white/90 hover:text-white hover:bg-white/15 active:scale-95 rounded-lg transition cursor-pointer" title="Bandeja de notificaciones y solicitudes de tutorías">
+                  <button onClick={() => setShowNotificationsModal(true)} className="relative p-1.5 sm:p-2 text-white/90 hover:text-white hover:bg-white/15 active:scale-95 rounded-lg transition cursor-pointer shrink-0" title="Bandeja de notificaciones y solicitudes de tutorías">
                     <Bell className="w-4.5 h-4.5 sm:w-5 sm:h-5 shrink-0" />
                     {unreadNotifCount > 0 && (
                       <span className="absolute top-0.5 right-0.5 w-3.5 h-3.5 bg-red-500 text-white rounded-full text-[9px] font-bold flex items-center justify-center shadow-sm">
@@ -3689,7 +3692,7 @@ export default function App() {
                 )}
 
                 {currentUser.role !== 'admin' && (
-                  <button onClick={() => setActiveTab('profile')} className={`flex items-center space-x-1.5 px-2 sm:px-4 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 cursor-pointer ${activeTab === 'profile' ? 'bg-white/25 text-white shadow-xs' : 'text-white/90 hover:bg-white/15'}`} title="Ver y gestionar mi perfil institucional">
+                  <button onClick={() => setActiveTab('profile')} className={`flex items-center space-x-1.5 px-2 sm:px-4 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 cursor-pointer shrink-0 ${activeTab === 'profile' ? 'bg-white/25 text-white shadow-xs' : 'text-white/90 hover:bg-white/15'}`} title="Ver y gestionar mi perfil institucional">
                     {currentUser.avatar ? (
                       <img src={currentUser.avatar} alt="Avatar" className="w-5 h-5 sm:w-6 sm:h-6 rounded-full object-cover border border-white shrink-0" />
                     ) : (
@@ -3699,7 +3702,7 @@ export default function App() {
                   </button>
                 )}
 
-                <button onClick={handleLogout} className="p-1.5 sm:p-2 text-white/90 hover:text-red-200 hover:bg-white/15 active:scale-95 rounded-lg transition-all flex items-center cursor-pointer" title="Cerrar sesión de forma segura">
+                <button onClick={handleLogout} className="p-1.5 sm:p-2 text-white/90 hover:text-red-200 hover:bg-white/15 active:scale-95 rounded-lg transition-all flex items-center cursor-pointer shrink-0" title="Cerrar sesión de forma segura">
                   <LogOut className="w-4.5 h-4.5 sm:w-5 sm:h-5 shrink-0" />
                   <span className="text-sm font-semibold hidden md:inline ml-1 whitespace-nowrap">Salir</span>
                 </button>
@@ -3712,40 +3715,16 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
         {currentUser ? (
           <div>
-            {/* BARRA DE NAVEGACIÓN DE MÓDULOS MOVIBLE Y FIJA (STICKY) AL HACER SCROLL HASTA EL FINAL */}
-            <div className="sticky top-16 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl p-1.5 sm:p-2 mb-3 border border-slate-200/90 dark:border-slate-800 shadow-md flex items-center gap-1 sm:gap-2 transition-all">
-              {/* BOTÓN PARA ABRIR SIDE VAR (SIEMPRE VISIBLE EN LA BARRA DE MÓDULOS, INCLUIDO EN CELULARES) */}
-              <button
-                type="button"
-                onClick={() => setShowSidebar(true)}
-                className="px-2.5 sm:px-3 py-2 rounded-xl text-xs sm:text-sm font-extrabold bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/80 active:scale-95 transition-all flex items-center gap-1.5 shrink-0 cursor-pointer border border-blue-200/80 dark:border-blue-800/80 shadow-2xs"
-                title="Abrir menú lateral Side Var (Alt + M)"
-                aria-label="Abrir Side Var"
-              >
-                <Menu className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400" />
-                <span className="font-extrabold text-xs whitespace-nowrap">Side Var</span>
-              </button>
-
-              <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 shrink-0 mx-0.5"></div>
-
-              {/* BOTÓN DESPLAZAR IZQUIERDA */}
-              <button
-                type="button"
-                onClick={() => scrollTabs(-180)}
-                className="p-1.5 sm:p-2 rounded-xl text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition shrink-0 cursor-pointer"
-                title="Desplazar módulos a la izquierda"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-
-              {/* CONTENEDOR DE PESTAÑAS MOVIBLE / DESLIZABLE POR ARRASTRE */}
+            {/* BARRA DE NAVEGACIÓN DE MÓDULOS (STICKY AL HACER SCROLL) */}
+            <div className="sticky top-14 sm:top-16 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl p-1.5 sm:p-2 mb-4 sm:mb-6 border border-slate-200/90 dark:border-slate-800 shadow-sm transition-all w-full">
+              {/* CONTENEDOR DE PESTAÑAS MOVIBLE / DESLIZABLE */}
               <div
                 ref={navTabsRef}
                 onMouseDown={handleMouseDownTabs}
                 onMouseLeave={handleMouseLeaveTabs}
                 onMouseUp={handleMouseUpTabs}
                 onMouseMove={handleMouseMoveTabs}
-                className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto py-1 flex-1 no-scrollbar flex-nowrap scroll-smooth cursor-grab active:cursor-grabbing select-none"
+                className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto py-1 w-full no-scrollbar flex-nowrap scroll-smooth cursor-grab active:cursor-grabbing select-none"
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
               >
                 {getNavigationModules().map((mod) => {
@@ -3756,7 +3735,7 @@ export default function App() {
                       key={mod.id}
                       type="button"
                       onClick={() => navigateToTab(mod.id)}
-                      className={`px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${
+                      className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${
                         isActive
                           ? 'text-white shadow-md'
                           : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -3770,16 +3749,6 @@ export default function App() {
                   );
                 })}
               </div>
-
-              {/* BOTÓN DESPLAZAR DERECHA */}
-              <button
-                type="button"
-                onClick={() => scrollTabs(180)}
-                className="p-1.5 sm:p-2 rounded-xl text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition shrink-0 cursor-pointer"
-                title="Desplazar módulos a la derecha"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
             </div>
 
             {activeTab === 'dashboard' && (
