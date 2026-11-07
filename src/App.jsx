@@ -3708,84 +3708,74 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
         {currentUser ? (
           <div>
-            {/* BARRA DE NAVEGACIÓN DE MÓDULOS MOVIBLE (DRAGGABLE / SWIPEABLE) */}
-            <div className="bg-white dark:bg-slate-900 rounded-2xl p-2 sm:p-2.5 mb-2 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row gap-2 items-stretch md:items-center justify-between transition-colors">
-              <div className="flex items-center gap-1 sm:gap-1.5 min-w-0 flex-1">
-                {/* BOTÓN PARA ABRIR SIDE VAR */}
-                <button
-                  type="button"
-                  onClick={() => setShowSidebar(true)}
-                  className="px-2.5 sm:px-3 py-2 rounded-xl text-xs sm:text-sm font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-blue-950/40 hover:text-blue-600 dark:hover:text-blue-400 active:scale-95 transition-all flex items-center gap-1.5 shrink-0 cursor-pointer border border-slate-200/80 dark:border-slate-700/60"
-                  title="Abrir menú lateral Side Var (Alt + M)"
-                >
-                  <Menu className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400" />
-                  <span className="hidden sm:inline font-extrabold text-xs">Side Var</span>
-                </button>
+            {/* BARRA DE NAVEGACIÓN DE MÓDULOS MOVIBLE Y FIJA (STICKY) AL HACER SCROLL HASTA EL FINAL */}
+            <div className="sticky top-16 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl p-1.5 sm:p-2 mb-3 border border-slate-200/90 dark:border-slate-800 shadow-md flex items-center gap-1 sm:gap-2 transition-all">
+              {/* BOTÓN PARA ABRIR SIDE VAR (SIEMPRE VISIBLE EN LA BARRA DE MÓDULOS, INCLUIDO EN CELULARES) */}
+              <button
+                type="button"
+                onClick={() => setShowSidebar(true)}
+                className="px-2.5 sm:px-3 py-2 rounded-xl text-xs sm:text-sm font-extrabold bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/80 active:scale-95 transition-all flex items-center gap-1.5 shrink-0 cursor-pointer border border-blue-200/80 dark:border-blue-800/80 shadow-2xs"
+                title="Abrir menú lateral Side Var (Alt + M)"
+                aria-label="Abrir Side Var"
+              >
+                <Menu className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                <span className="font-extrabold text-xs whitespace-nowrap">Side Var</span>
+              </button>
 
-                {/* BOTÓN DESPLAZAR IZQUIERDA */}
-                <button
-                  type="button"
-                  onClick={() => scrollTabs(-180)}
-                  className="p-2 rounded-xl text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition shrink-0 cursor-pointer"
-                  title="Desplazar módulos a la izquierda"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
+              <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 shrink-0 mx-0.5"></div>
 
-                {/* CONTENEDOR DE PESTAÑAS MOVIBLE / DESLIZABLE POR ARRASTRE */}
-                <div
-                  ref={navTabsRef}
-                  onMouseDown={handleMouseDownTabs}
-                  onMouseLeave={handleMouseLeaveTabs}
-                  onMouseUp={handleMouseUpTabs}
-                  onMouseMove={handleMouseMoveTabs}
-                  className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto py-1 max-w-full no-scrollbar flex-nowrap scroll-smooth cursor-grab active:cursor-grabbing select-none"
-                  style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-                >
-                  {getNavigationModules().map((mod) => {
-                    const Icon = mod.icon;
-                    const isActive = activeTab === mod.id;
-                    return (
-                      <button
-                        key={mod.id}
-                        type="button"
-                        onClick={() => navigateToTab(mod.id)}
-                        className={`px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${
-                          isActive
-                            ? 'text-white shadow-md'
-                            : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                        }`}
-                        style={isActive ? { backgroundColor: primaryColor } : {}}
-                        title={`${mod.fullName} (${mod.shortcut})`}
-                      >
-                        <Icon className="w-4 h-4 shrink-0" />
-                        <span className="whitespace-nowrap">{mod.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
+              {/* BOTÓN DESPLAZAR IZQUIERDA */}
+              <button
+                type="button"
+                onClick={() => scrollTabs(-180)}
+                className="p-1.5 sm:p-2 rounded-xl text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition shrink-0 cursor-pointer"
+                title="Desplazar módulos a la izquierda"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
 
-                {/* BOTÓN DESPLAZAR DERECHA */}
-                <button
-                  type="button"
-                  onClick={() => scrollTabs(180)}
-                  className="p-2 rounded-xl text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition shrink-0 cursor-pointer"
-                  title="Desplazar módulos a la derecha"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
+              {/* CONTENEDOR DE PESTAÑAS MOVIBLE / DESLIZABLE POR ARRASTRE */}
+              <div
+                ref={navTabsRef}
+                onMouseDown={handleMouseDownTabs}
+                onMouseLeave={handleMouseLeaveTabs}
+                onMouseUp={handleMouseUpTabs}
+                onMouseMove={handleMouseMoveTabs}
+                className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto py-1 flex-1 no-scrollbar flex-nowrap scroll-smooth cursor-grab active:cursor-grabbing select-none"
+                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+              >
+                {getNavigationModules().map((mod) => {
+                  const Icon = mod.icon;
+                  const isActive = activeTab === mod.id;
+                  return (
+                    <button
+                      key={mod.id}
+                      type="button"
+                      onClick={() => navigateToTab(mod.id)}
+                      className={`px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${
+                        isActive
+                          ? 'text-white shadow-md'
+                          : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      }`}
+                      style={isActive ? { backgroundColor: primaryColor } : {}}
+                      title={`${mod.fullName} (${mod.shortcut})`}
+                    >
+                      <Icon className="w-4 h-4 shrink-0" />
+                      <span className="whitespace-nowrap">{mod.label}</span>
+                    </button>
+                  );
+                })}
               </div>
 
-              {/* ROL EN LA BARRA DE NAVEGACIÓN PRINCIPAL */}
-              <div className="flex items-center justify-end shrink-0 pt-1 md:pt-0 border-t md:border-t-0 border-slate-100 dark:border-slate-800">
-                <div className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 shadow-2xs">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
-                  <span className="text-[10px] uppercase font-bold text-slate-400">Rol:</span>
-                  <span className="font-extrabold uppercase text-[11px] text-slate-900 dark:text-white">
-                    {currentUser.role === 'admin' ? 'Super Admin' : currentUser.role === 'tutor' ? 'Tutor' : 'Estudiante'}
-                  </span>
-                </div>
-              </div>
+              {/* BOTÓN DESPLAZAR DERECHA */}
+              <button
+                type="button"
+                onClick={() => scrollTabs(180)}
+                className="p-1.5 sm:p-2 rounded-xl text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition shrink-0 cursor-pointer"
+                title="Desplazar módulos a la derecha"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
 
             {/* BARRA DE ATAJOS RÁPIDOS DE NAVEGACIÓN ENTRE MÓDULOS */}
@@ -7376,6 +7366,20 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      {/* BOTÓN FLOTANTE PERSISTENTE DE SIDE VAR (ESPECIALMENTE EN CELULARES) */}
+      {currentUser && (
+        <button
+          type="button"
+          onClick={() => setShowSidebar(true)}
+          className="fixed bottom-5 left-5 z-40 sm:hidden flex items-center gap-2 px-4 py-2.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-black text-xs shadow-2xl shadow-blue-900/60 active:scale-95 transition-all border-2 border-white/60 cursor-pointer backdrop-blur-sm"
+          title="Abrir Menú Lateral Side Var (Alt + M)"
+          aria-label="Abrir Side Var"
+        >
+          <Menu className="w-4 h-4 shrink-0" />
+          <span>Side Var</span>
+        </button>
+      )}
 
       {/* BOTÓN FLOTANTE DE ACCESIBILIDAD (SUBIR AL INICIO / BAJAR AL FINAL) */}
       <div className="fixed bottom-5 right-5 z-40 flex flex-col items-center space-y-2">
