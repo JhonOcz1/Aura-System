@@ -530,7 +530,7 @@ const saveStoredReadNotifId = (id) => {
     const set = getStoredReadNotifIds();
     set.add(id);
     localStorage.setItem('aura_read_notif_ids', JSON.stringify([...set]));
-  } catch (e) {}
+  } catch (e) { }
 };
 
 const saveMultipleStoredReadNotifIds = (ids) => {
@@ -539,7 +539,7 @@ const saveMultipleStoredReadNotifIds = (ids) => {
     const set = getStoredReadNotifIds();
     ids.forEach(id => { if (id) set.add(id); });
     localStorage.setItem('aura_read_notif_ids', JSON.stringify([...set]));
-  } catch (e) {}
+  } catch (e) { }
 };
 
 const mapNotifFromDB = (n) => {
@@ -645,7 +645,7 @@ export default function App() {
       if (activeTab) {
         sessionStorage.setItem('aura_active_tab', activeTab);
       }
-    } catch (e) {}
+    } catch (e) { }
   }, [activeTab]);
 
   // Si un usuario no administrador tiene guardada una pestaña de admin, redirigir a dashboard
@@ -682,7 +682,7 @@ export default function App() {
         document.documentElement.classList.remove('dark');
         localStorage.setItem('aura_theme', 'light');
       }
-    } catch (e) {}
+    } catch (e) { }
   }, [isDarkMode]);
 
   const toggleDarkMode = () => setIsDarkMode(prev => !prev);
@@ -774,7 +774,7 @@ export default function App() {
     try {
       const saved = localStorage.getItem('aura_catalog_subjects');
       if (saved) return JSON.parse(saved);
-    } catch (e) {}
+    } catch (e) { }
     return INITIAL_CATALOG_SUBJECTS;
   });
 
@@ -782,14 +782,14 @@ export default function App() {
     try {
       const saved = localStorage.getItem('aura_career_semesters');
       if (saved) return JSON.parse(saved);
-    } catch (e) {}
+    } catch (e) { }
     return {};
   });
 
   useEffect(() => {
     try {
       localStorage.setItem('aura_catalog_subjects', JSON.stringify(catalogSubjects));
-    } catch (e) {}
+    } catch (e) { }
   }, [catalogSubjects]);
 
   const [careerToDelete, setCareerToDelete] = useState(null);
@@ -856,7 +856,7 @@ export default function App() {
         if (usersData && usersData.length > 0) {
           const mappedUsers = usersData.map(mapUserFromDB);
           setUsers(mappedUsers);
-          try { localStorage.setItem('aura_cached_users', JSON.stringify(mappedUsers)); } catch (e) {}
+          try { localStorage.setItem('aura_cached_users', JSON.stringify(mappedUsers)); } catch (e) { }
 
           const savedActive = sessionStorage.getItem('aura_active_user');
           if (savedActive) {
@@ -893,7 +893,7 @@ export default function App() {
         if (sessionsData) {
           const mappedSessions = sessionsData.map(mapSessionFromDB);
           setSessions(mappedSessions);
-          try { localStorage.setItem('aura_cached_sessions', JSON.stringify(mappedSessions)); } catch (e) {}
+          try { localStorage.setItem('aura_cached_sessions', JSON.stringify(mappedSessions)); } catch (e) { }
           setActiveChatSession(prev => {
             if (!prev) return null;
             const fresh = mappedSessions.find(s => s.id === prev.id);
@@ -903,7 +903,7 @@ export default function App() {
 
         if (careersData && careersData.length > 0) {
           setCareers(careersData);
-          try { localStorage.setItem('aura_cached_careers', JSON.stringify(careersData)); } catch (e) {}
+          try { localStorage.setItem('aura_cached_careers', JSON.stringify(careersData)); } catch (e) { }
         }
 
         try {
@@ -917,18 +917,18 @@ export default function App() {
               tutorIds: Array.isArray(s.tutor_ids) ? s.tutor_ids : []
             }));
             setCatalogSubjects(mappedSubs);
-            try { localStorage.setItem('aura_catalog_subjects', JSON.stringify(mappedSubs)); } catch (e) {}
+            try { localStorage.setItem('aura_catalog_subjects', JSON.stringify(mappedSubs)); } catch (e) { }
           }
-        } catch (e) {}
+        } catch (e) { }
 
         if (reviewsData) {
           setReviews(reviewsData);
-          try { localStorage.setItem('aura_cached_reviews', JSON.stringify(reviewsData)); } catch (e) {}
+          try { localStorage.setItem('aura_cached_reviews', JSON.stringify(reviewsData)); } catch (e) { }
         }
         if (auditsData) {
           const mappedAudits = auditsData.map(mapAuditFromDB).sort((a, b) => (b.id || '').localeCompare(a.id || ''));
           setAudits(mappedAudits);
-          try { localStorage.setItem('aura_cached_audits', JSON.stringify(mappedAudits)); } catch (e) {}
+          try { localStorage.setItem('aura_cached_audits', JSON.stringify(mappedAudits)); } catch (e) { }
         }
         if (notifsData) {
           const mappedNotifs = notifsData.map(mapNotifFromDB);
@@ -940,7 +940,7 @@ export default function App() {
               }
               return n;
             });
-            try { localStorage.setItem('aura_cached_notifications', JSON.stringify(merged)); } catch (e) {}
+            try { localStorage.setItem('aura_cached_notifications', JSON.stringify(merged)); } catch (e) { }
             return merged;
           });
         }
@@ -957,7 +957,7 @@ export default function App() {
         if (sessionsData) {
           const mappedSessions = sessionsData.map(mapSessionFromDB);
           setSessions(mappedSessions);
-          try { localStorage.setItem('aura_cached_sessions', JSON.stringify(mappedSessions)); } catch (e) {}
+          try { localStorage.setItem('aura_cached_sessions', JSON.stringify(mappedSessions)); } catch (e) { }
           setActiveChatSession(prev => {
             if (!prev) return null;
             const fresh = mappedSessions.find(s => s.id === prev.id);
@@ -975,7 +975,7 @@ export default function App() {
               }
               return n;
             });
-            try { localStorage.setItem('aura_cached_notifications', JSON.stringify(merged)); } catch (e) {}
+            try { localStorage.setItem('aura_cached_notifications', JSON.stringify(merged)); } catch (e) { }
             return merged;
           });
         }
@@ -997,7 +997,7 @@ export default function App() {
                 return;
               }
             }
-          } catch (eCheck) {}
+          } catch (eCheck) { }
         }
       }
     } catch (e) {
@@ -1056,7 +1056,7 @@ export default function App() {
             }
             return n;
           });
-          try { localStorage.setItem('aura_cached_notifications', JSON.stringify(merged)); } catch (e) {}
+          try { localStorage.setItem('aura_cached_notifications', JSON.stringify(merged)); } catch (e) { }
           return merged;
         });
       }
@@ -1130,7 +1130,7 @@ export default function App() {
     };
     setNotifications(prev => {
       const updated = [newNotif, ...prev];
-      try { localStorage.setItem('aura_cached_notifications', JSON.stringify(updated)); } catch (e) {}
+      try { localStorage.setItem('aura_cached_notifications', JSON.stringify(updated)); } catch (e) { }
       return updated;
     });
     try {
@@ -1295,7 +1295,7 @@ export default function App() {
         await supabase.from('users').update({
           subjects_detailed: (userToLogout.subjectsDetailed || []).filter(s => !s || !s.__session)
         }).eq('id', userToLogout.id);
-      } catch (e) {}
+      } catch (e) { }
       await logAudit(userToLogout.name, 'CIERRE DE SESIÓN', reason);
     }
   };
@@ -1336,7 +1336,7 @@ export default function App() {
               { __session: true, token: localToken, last_active: now }
             ]
           }).eq('id', currentUser.id);
-        } catch (ePulse) {}
+        } catch (ePulse) { }
       }
     }, 5000);
 
@@ -1551,7 +1551,7 @@ export default function App() {
         }
 
         const rawHeaders = rows[0];
-        const normalizedHeaders = rawHeaders.map(h => 
+        const normalizedHeaders = rawHeaders.map(h =>
           h.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '')
         );
 
@@ -1661,7 +1661,7 @@ export default function App() {
     }
   };
 
-  
+
   // Función para cambio de contraseña de tutores y estudiantes
   const handleUpdatePassword = async (e) => {
     e.preventDefault();
@@ -1881,7 +1881,7 @@ export default function App() {
           text: sysMsg.text,
           created_at: new Date().toISOString()
         }]);
-      } catch (eMsg) {}
+      } catch (eMsg) { }
 
       setSessions(prev => [newSession, ...prev]);
 
@@ -2004,7 +2004,7 @@ export default function App() {
     }
   };
 
-  
+
   // Función para que el Tutor cree una nueva oferta de tutoría desde su panel principal
   const handleTutorCreateSession = async (e) => {
     e.preventDefault();
@@ -2094,7 +2094,7 @@ export default function App() {
           text: sysMsg.text,
           created_at: new Date().toISOString()
         }]);
-      } catch (errMsg) {}
+      } catch (errMsg) { }
 
       setSessions(prev => [newSession, ...prev]);
       await logAudit(
@@ -2141,7 +2141,7 @@ export default function App() {
           time: 'Justo ahora',
           read: false
         }]);
-      } catch (eNotif) {}
+      } catch (eNotif) { }
 
       await logAudit(
         currentUser.name,
@@ -2156,7 +2156,7 @@ export default function App() {
     }
   };
 
-    // Función para que un estudiante se inscriba en una oferta abierta de tutoría de su carrera
+  // Función para que un estudiante se inscriba en una oferta abierta de tutoría de su carrera
   const handleStudentEnrollSession = async (session) => {
     try {
       const enrollMsg = {
@@ -2202,7 +2202,7 @@ export default function App() {
           text: enrollMsg.text,
           created_at: new Date().toISOString()
         }]);
-      } catch (eMsg) {}
+      } catch (eMsg) { }
 
       try {
         const notifId = `not_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
@@ -2216,7 +2216,7 @@ export default function App() {
           time: 'Justo ahora',
           read: false
         }]);
-      } catch (eNotif) {}
+      } catch (eNotif) { }
 
       const updatedSession = {
         ...session,
@@ -2321,12 +2321,12 @@ export default function App() {
 
     setReviews(prev => {
       const updated = [newReview, ...prev];
-      try { localStorage.setItem('aura_cached_reviews', JSON.stringify(updated)); } catch (err) {}
+      try { localStorage.setItem('aura_cached_reviews', JSON.stringify(updated)); } catch (err) { }
       return updated;
     });
     setSessions(prev => {
       const updated = prev.map(s => s.id === ratedSessionId ? { ...s, status: 'completed' } : s);
-      try { localStorage.setItem('aura_cached_sessions', JSON.stringify(updated)); } catch (err) {}
+      try { localStorage.setItem('aura_cached_sessions', JSON.stringify(updated)); } catch (err) { }
       return updated;
     });
     setSessionToRate(null);
@@ -2348,7 +2348,7 @@ export default function App() {
     saveStoredReadNotifId(notifId);
     setNotifications(prev => {
       const updated = prev.map(n => n.id === notifId ? { ...n, read: true } : n);
-      try { localStorage.setItem('aura_cached_notifications', JSON.stringify(updated)); } catch (err) {}
+      try { localStorage.setItem('aura_cached_notifications', JSON.stringify(updated)); } catch (err) { }
       return updated;
     });
 
@@ -2366,7 +2366,7 @@ export default function App() {
 
     setNotifications(prev => {
       const updated = prev.map(n => n.userId === currentUser?.id ? { ...n, read: true } : n);
-      try { localStorage.setItem('aura_cached_notifications', JSON.stringify(updated)); } catch (err) {}
+      try { localStorage.setItem('aura_cached_notifications', JSON.stringify(updated)); } catch (err) { }
       return updated;
     });
 
@@ -2382,7 +2382,7 @@ export default function App() {
     saveStoredReadNotifId(notif.id);
     setNotifications(prev => {
       const updated = prev.map(n => n.id === notif.id ? { ...n, read: true } : n);
-      try { localStorage.setItem('aura_cached_notifications', JSON.stringify(updated)); } catch (err) {}
+      try { localStorage.setItem('aura_cached_notifications', JSON.stringify(updated)); } catch (err) { }
       return updated;
     });
     setShowNotificationsModal(false);
@@ -2405,7 +2405,7 @@ export default function App() {
     }
 
     // Redirección directa al chat en el módulo de Mensajes cuando llega un mensaje o tutoría aceptada
-    const isChatMessage = notif.type === 'chat_message' || 
+    const isChatMessage = notif.type === 'chat_message' ||
       (notif.title && notif.title.toLowerCase().includes('mensaje')) ||
       (notif.text && notif.text.toLowerCase().includes('módulo de mensajes'));
 
@@ -2427,7 +2427,7 @@ export default function App() {
             setActiveChatSession(mapped);
             setSessions(prev => prev.map(s => s.id === mapped.id ? mapped : s));
           }
-        } catch (e) {}
+        } catch (e) { }
       }
       return;
     }
@@ -2467,13 +2467,13 @@ export default function App() {
 
     setNotifications(prev => {
       const updated = prev.map(n => ((n.sessionId === sessionObj.id || n.session_id === sessionObj.id) && n.userId === currentUser.id) ? { ...n, read: true } : n);
-      try { localStorage.setItem('aura_cached_notifications', JSON.stringify(updated)); } catch (err) {}
+      try { localStorage.setItem('aura_cached_notifications', JSON.stringify(updated)); } catch (err) { }
       return updated;
     });
 
     try {
       await supabase.from('notifications').update({ read: true }).eq('session_id', sessionObj.id).eq('user_id', currentUser.id);
-    } catch (e) {}
+    } catch (e) { }
 
     const currentChat = (sessionObj.chat || []).filter(m => !m || !m.__meta);
     const initChat = currentChat.length > 0 ? currentChat : [
@@ -2532,13 +2532,13 @@ export default function App() {
 
     setNotifications(prev => {
       const updated = prev.map(n => ((n.sessionId === sessionObj.id || n.session_id === sessionObj.id) && n.userId === currentUser.id) ? { ...n, read: true } : n);
-      try { localStorage.setItem('aura_cached_notifications', JSON.stringify(updated)); } catch (err) {}
+      try { localStorage.setItem('aura_cached_notifications', JSON.stringify(updated)); } catch (err) { }
       return updated;
     });
 
     try {
       await supabase.from('notifications').update({ read: true }).eq('session_id', sessionObj.id).eq('user_id', currentUser.id);
-    } catch (e) {}
+    } catch (e) { }
 
     setSessions(prev => prev.map(s => s.id === sessionObj.id ? { ...s, status: 'rejected' } : s));
     setPendingRequestToReview(null);
@@ -2556,7 +2556,7 @@ export default function App() {
     }
   };
 
-  
+
   // Funciones de gestión de Catálogo Académico, Pensum y Materias
   const handleDeleteCareerConfirm = async () => {
     if (!careerToDelete) return;
@@ -2578,7 +2578,7 @@ export default function App() {
       }
       setSessions(prev => {
         const filtered = prev.filter(s => s.career !== careerToDelete.name);
-        try { localStorage.setItem('aura_cached_sessions', JSON.stringify(filtered)); } catch (e) {}
+        try { localStorage.setItem('aura_cached_sessions', JSON.stringify(filtered)); } catch (e) { }
         return filtered;
       });
       await logAudit(
@@ -2788,7 +2788,7 @@ export default function App() {
             tutor_ids: s.tutorIds || []
           }));
           await supabase.from('subjects').upsert(subjectsToUpsert);
-        } catch (e) {}
+        } catch (e) { }
 
         for (const tut of tutorsToUpdate.values()) {
           await updateUserInDB(tut);
@@ -2863,7 +2863,7 @@ export default function App() {
     setCatalogSubjects(updatedCatalog);
     try {
       localStorage.setItem('aura_catalog_subjects', JSON.stringify(updatedCatalog));
-    } catch (err) {}
+    } catch (err) { }
 
     await logAudit(
       currentUser.name,
@@ -2942,7 +2942,7 @@ export default function App() {
         }
         return s;
       });
-      try { localStorage.setItem('aura_catalog_subjects', JSON.stringify(next)); } catch (e) {}
+      try { localStorage.setItem('aura_catalog_subjects', JSON.stringify(next)); } catch (e) { }
       return next;
     });
 
@@ -2978,7 +2978,7 @@ export default function App() {
           }
           return s;
         });
-        try { localStorage.setItem('aura_catalog_subjects', JSON.stringify(next)); } catch (e) {}
+        try { localStorage.setItem('aura_catalog_subjects', JSON.stringify(next)); } catch (e) { }
         return next;
       });
 
@@ -3020,7 +3020,7 @@ export default function App() {
           const updatedDetailed = (t.subjectsDetailed || []).filter(sd => sd.name !== subjectName);
           await supabase.from('users').update({ subjects_detailed: updatedDetailed }).eq('id', t.id);
         }
-      } catch (errTut) {}
+      } catch (errTut) { }
     } catch (err) {
       console.error(err);
     }
@@ -3030,12 +3030,12 @@ export default function App() {
     setCatalogSubjects(updatedCatalog);
     try {
       localStorage.setItem('aura_catalog_subjects', JSON.stringify(updatedCatalog));
-    } catch (err) {}
+    } catch (err) { }
 
     // 5. Depurar sesiones huérfanas localmente
     setSessions(prev => {
       const filtered = prev.filter(s => s.subject !== subjectName);
-      try { localStorage.setItem('aura_cached_sessions', JSON.stringify(filtered)); } catch (err) {}
+      try { localStorage.setItem('aura_cached_sessions', JSON.stringify(filtered)); } catch (err) { }
       return filtered;
     });
 
@@ -3595,136 +3595,136 @@ export default function App() {
           <div>
             <div className="bg-white dark:bg-slate-900 rounded-2xl p-2 sm:p-2.5 mb-6 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row gap-2 items-stretch md:items-center justify-between transition-colors">
               <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto py-1 max-w-full scrollbar-none flex-nowrap sm:flex-wrap">
-              <button
-                type="button"
-                onClick={() => setActiveTab('dashboard')}
-                className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'dashboard' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-                style={activeTab === 'dashboard' ? { backgroundColor: primaryColor } : {}}
-                title="Panel Principal de AURA Estudiantil"
-              >
-                <Activity className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Panel</span>
-              </button>
-
-              {currentUser.role === 'admin' && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('admin_users')}
-                    className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'admin_users' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-                    style={activeTab === 'admin_users' ? { backgroundColor: primaryColor } : {}}
-                    title="RFADM01 - Gestión de Usuarios, Roles y Cuentas"
-                  >
-                    <Users className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Usuarios</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('admin_academic')}
-                    className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'admin_academic' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-                    style={activeTab === 'admin_academic' ? { backgroundColor: primaryColor } : {}}
-                    title="RFADM02 - Catálogo Académico, Carreras, Materias y Pensum"
-                  >
-                    <BookOpen className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Académico</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('admin_moderation')}
-                    className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'admin_moderation' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-                    style={activeTab === 'admin_moderation' ? { backgroundColor: primaryColor } : {}}
-                    title="RFADM03 - Moderación y Supervisión de Reseñas"
-                  >
-                    <MessageSquareOff className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Moderación</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('admin_stats')}
-                    className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'admin_stats' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-                    style={activeTab === 'admin_stats' ? { backgroundColor: primaryColor } : {}}
-                    title="RFADM04 - Estadísticas, Métricas y Filtros de Demanda"
-                  >
-                    <BarChart3 className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Estadísticas</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('admin_security')}
-                    className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'admin_security' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-                    style={activeTab === 'admin_security' ? { backgroundColor: primaryColor } : {}}
-                    title="RFADM05 - Supervisión de Seguridad y Bitácora Inmutable en PDF"
-                  >
-                    <ShieldCheck className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Seguridad</span>
-                  </button>
-                </>
-              )}
-
-              {currentUser.role === 'student' && (
                 <button
                   type="button"
-                  onClick={() => setActiveTab('find_tutors')}
-                  className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'find_tutors' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-                  style={activeTab === 'find_tutors' ? { backgroundColor: primaryColor } : {}}
-                  title="Explorar el catálogo de tutores disponibles para agendar citas"
+                  onClick={() => setActiveTab('dashboard')}
+                  className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'dashboard' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                  style={activeTab === 'dashboard' ? { backgroundColor: primaryColor } : {}}
+                  title="Panel Principal de AURA Estudiantil"
                 >
-                  <Search className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Tutores</span>
+                  <Activity className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Panel</span>
                 </button>
-              )}
 
-              {currentUser.role !== 'admin' && (
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('sessions')}
-                  className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'sessions' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-                  style={activeTab === 'sessions' ? { backgroundColor: primaryColor } : {}}
-                  title="Consultar mis citas, tutorías activas y solicitudes pendientes"
-                >
-                  <Calendar className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Tutorías</span>
-                </button>
-              )}
+                {currentUser.role === 'admin' && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('admin_users')}
+                      className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'admin_users' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                      style={activeTab === 'admin_users' ? { backgroundColor: primaryColor } : {}}
+                      title="RFADM01 - Gestión de Usuarios, Roles y Cuentas"
+                    >
+                      <Users className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Usuarios</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('admin_academic')}
+                      className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'admin_academic' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                      style={activeTab === 'admin_academic' ? { backgroundColor: primaryColor } : {}}
+                      title="RFADM02 - Catálogo Académico, Carreras, Materias y Pensum"
+                    >
+                      <BookOpen className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Académico</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('admin_moderation')}
+                      className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'admin_moderation' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                      style={activeTab === 'admin_moderation' ? { backgroundColor: primaryColor } : {}}
+                      title="RFADM03 - Moderación y Supervisión de Reseñas"
+                    >
+                      <MessageSquareOff className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Moderación</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('admin_stats')}
+                      className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'admin_stats' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                      style={activeTab === 'admin_stats' ? { backgroundColor: primaryColor } : {}}
+                      title="RFADM04 - Estadísticas, Métricas y Filtros de Demanda"
+                    >
+                      <BarChart3 className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Estadísticas</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('admin_security')}
+                      className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'admin_security' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                      style={activeTab === 'admin_security' ? { backgroundColor: primaryColor } : {}}
+                      title="RFADM05 - Supervisión de Seguridad y Bitácora Inmutable en PDF"
+                    >
+                      <ShieldCheck className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Seguridad</span>
+                    </button>
+                  </>
+                )}
 
-              {currentUser.role !== 'admin' && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab('messages');
-                    if (!activeChatSession) {
-                      const userSessions = sessions.filter(s =>
-                        (currentUser.role === 'tutor' ? s.tutorId === currentUser.id : s.studentId === currentUser.id) &&
-                        (s.status === 'confirmed' || s.status === 'completed')
-                      );
-                      if (userSessions.length > 0) setActiveChatSession(userSessions[0]);
-                    }
-                  }}
-                  className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'messages' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-                  style={activeTab === 'messages' ? { backgroundColor: primaryColor } : {}}
-                  title="Abrir el centro de mensajería institucional en vivo"
-                >
-                  <MessageCircle className="w-4 h-4 shrink-0" />
-                  <span className="whitespace-nowrap">Mensajes</span>
-                </button>
-              )}
+                {currentUser.role === 'student' && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('find_tutors')}
+                    className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'find_tutors' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                    style={activeTab === 'find_tutors' ? { backgroundColor: primaryColor } : {}}
+                    title="Explorar el catálogo de tutores disponibles para agendar citas"
+                  >
+                    <Search className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Tutores</span>
+                  </button>
+                )}
 
-              {currentUser.role !== 'admin' && (
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('reviews')}
-                  className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'reviews' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-                  style={activeTab === 'reviews' ? { backgroundColor: primaryColor } : {}}
-                  title="Ver valoraciones y reseñas académicas de tutores"
-                >
-                  <Star className="w-4 h-4 shrink-0" />
-                  <span className="whitespace-nowrap">Reseñas</span>
-                </button>
-              )}
+                {currentUser.role !== 'admin' && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('sessions')}
+                    className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'sessions' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                    style={activeTab === 'sessions' ? { backgroundColor: primaryColor } : {}}
+                    title="Consultar mis citas, tutorías activas y solicitudes pendientes"
+                  >
+                    <Calendar className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Tutorías</span>
+                  </button>
+                )}
 
-              {currentUser.role !== 'admin' && (
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('profile')}
-                  className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'profile' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-                  style={activeTab === 'profile' ? { backgroundColor: primaryColor } : {}}
-                  title="Ver y editar mis datos de perfil de usuario"
-                >
-                  <User className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Perfil</span>
-                </button>
-              )}
+                {currentUser.role !== 'admin' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('messages');
+                      if (!activeChatSession) {
+                        const userSessions = sessions.filter(s =>
+                          (currentUser.role === 'tutor' ? s.tutorId === currentUser.id : s.studentId === currentUser.id) &&
+                          (s.status === 'confirmed' || s.status === 'completed')
+                        );
+                        if (userSessions.length > 0) setActiveChatSession(userSessions[0]);
+                      }
+                    }}
+                    className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'messages' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                    style={activeTab === 'messages' ? { backgroundColor: primaryColor } : {}}
+                    title="Abrir el centro de mensajería institucional en vivo"
+                  >
+                    <MessageCircle className="w-4 h-4 shrink-0" />
+                    <span className="whitespace-nowrap">Mensajes</span>
+                  </button>
+                )}
+
+                {currentUser.role !== 'admin' && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('reviews')}
+                    className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'reviews' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                    style={activeTab === 'reviews' ? { backgroundColor: primaryColor } : {}}
+                    title="Ver valoraciones y reseñas académicas de tutores"
+                  >
+                    <Star className="w-4 h-4 shrink-0" />
+                    <span className="whitespace-nowrap">Reseñas</span>
+                  </button>
+                )}
+
+                {currentUser.role !== 'admin' && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('profile')}
+                    className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'profile' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                    style={activeTab === 'profile' ? { backgroundColor: primaryColor } : {}}
+                    title="Ver y editar mis datos de perfil de usuario"
+                  >
+                    <User className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Perfil</span>
+                  </button>
+                )}
               </div>
 
               {/* ROL EN LA BARRA DE NAVEGACIÓN PRINCIPAL */}
@@ -3746,7 +3746,7 @@ export default function App() {
                   <div>
                     <h1 className="text-2xl sm:text-4xl font-black">¡Hola, {currentUser.role === 'admin' ? 'Admin Global' : currentUser.name}!</h1>
                     <p className="text-white/80 text-sm mt-1">
-                      {currentUser.role === 'admin' 
+                      {currentUser.role === 'admin'
                         ? 'Panel Central de Control: visualización y monitoreo de tutorías activas en el sistema.'
                         : 'Bienvenido a tu plataforma académica AURA Estudiantil.'}
                     </p>
@@ -3784,7 +3784,7 @@ export default function App() {
                             const tutorName = tutorObj?.name || session.tutorName || 'Tutor Académico';
                             const catalogMatch = catalogSubjects.find(cs => cs.name?.toLowerCase() === session.subject?.toLowerCase());
                             const careerName = session.career || catalogMatch?.career || tutorObj?.career || 'General';
-                            const semesterNum = catalogMatch?.semester || 
+                            const semesterNum = catalogMatch?.semester ||
                               tutorObj?.subjectsDetailed?.find(sd => sd.name?.toLowerCase() === session.subject?.toLowerCase())?.semester || 1;
                             const isConfirmed = session.status === 'confirmed';
 
@@ -3796,9 +3796,8 @@ export default function App() {
                                 <div className="space-y-2">
                                   <div className="flex items-start justify-between gap-2">
                                     <h4 className="font-black text-base text-slate-900 leading-snug">{session.subject}</h4>
-                                    <span className={`px-2.5 py-1 rounded-xl text-[11px] font-black uppercase tracking-wider shrink-0 ${
-                                      isConfirmed ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-amber-100 text-amber-800 border border-amber-200'
-                                    }`}>
+                                    <span className={`px-2.5 py-1 rounded-xl text-[11px] font-black uppercase tracking-wider shrink-0 ${isConfirmed ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-amber-100 text-amber-800 border border-amber-200'
+                                      }`}>
                                       {isConfirmed ? 'Confirmada' : 'Pendiente'}
                                     </span>
                                   </div>
@@ -3863,7 +3862,7 @@ export default function App() {
                 {currentUser.role === 'tutor' && (() => {
                   const tutorSessions = (sessions || []).filter(s => s.tutorId === currentUser.id);
                   const activeTutorSessions = tutorSessions.filter(s => s.status === 'confirmed' || s.status === 'pending');
-                  
+
                   // Materias disponibles del pensum correspondientes a la carrera del tutor
                   const tutorCareerClean = (currentUser.career || '').trim().toLowerCase();
                   const pensumForTutorCareer = catalogSubjects.filter(
@@ -3949,9 +3948,8 @@ export default function App() {
                                         </p>
                                       </div>
 
-                                      <span className={`px-2.5 py-1 rounded-xl text-[11px] font-black uppercase tracking-wider shrink-0 ${
-                                        isConfirmed ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-amber-100 text-amber-800 border border-amber-200'
-                                      }`}>
+                                      <span className={`px-2.5 py-1 rounded-xl text-[11px] font-black uppercase tracking-wider shrink-0 ${isConfirmed ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-amber-100 text-amber-800 border border-amber-200'
+                                        }`}>
                                         {isConfirmed ? 'Confirmada' : 'Pendiente'}
                                       </span>
                                     </div>
@@ -4125,11 +4123,10 @@ export default function App() {
                                 <button
                                   type="button"
                                   onClick={() => setTutorNewTutModality('Presencial')}
-                                  className={`py-2.5 px-3 rounded-xl font-bold text-xs border transition flex items-center justify-center space-x-1.5 ${
-                                    tutorNewTutModality === 'Presencial'
+                                  className={`py-2.5 px-3 rounded-xl font-bold text-xs border transition flex items-center justify-center space-x-1.5 ${tutorNewTutModality === 'Presencial'
                                       ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
                                       : 'bg-white text-slate-700 hover:bg-slate-50 border-slate-200'
-                                  }`}
+                                    }`}
                                 >
                                   <MapPin className="w-4 h-4" />
                                   <span>Presencial</span>
@@ -4137,11 +4134,10 @@ export default function App() {
                                 <button
                                   type="button"
                                   onClick={() => setTutorNewTutModality('Virtual / Online')}
-                                  className={`py-2.5 px-3 rounded-xl font-bold text-xs border transition flex items-center justify-center space-x-1.5 ${
-                                    tutorNewTutModality === 'Virtual / Online'
+                                  className={`py-2.5 px-3 rounded-xl font-bold text-xs border transition flex items-center justify-center space-x-1.5 ${tutorNewTutModality === 'Virtual / Online'
                                       ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
                                       : 'bg-white text-slate-700 hover:bg-slate-50 border-slate-200'
-                                  }`}
+                                    }`}
                                 >
                                   <Video className="w-4 h-4" />
                                   <span>Online / Virtual</span>
@@ -4196,7 +4192,7 @@ export default function App() {
                 {/* SI ES ESTUDIANTE: VISTA DE OFERTAS DISPONIBLES DE SU CARRERA Y SUS TUTORÍAS */}
                 {currentUser.role === 'student' && (() => {
                   const studentCareerClean = (currentUser.career || '').trim().toLowerCase();
-                  
+
                   // Ofertas abiertas de tutorías para la carrera del estudiante
                   const availableOffers = (sessions || []).filter(s => {
                     const isOpen = !s.studentId || s.studentId === '' || s.studentName === 'Cupo Disponible (Abierta)';
@@ -4257,9 +4253,8 @@ export default function App() {
                                       <span className="px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider bg-purple-100 text-purple-800 border border-purple-200">
                                         Semestre {semesterNum}
                                       </span>
-                                      <span className={`px-2.5 py-1 rounded-xl text-[10px] font-bold uppercase tracking-wider flex items-center space-x-1 ${
-                                        isVirtual ? 'bg-indigo-100 text-indigo-800 border border-indigo-200' : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                      }`}>
+                                      <span className={`px-2.5 py-1 rounded-xl text-[10px] font-bold uppercase tracking-wider flex items-center space-x-1 ${isVirtual ? 'bg-indigo-100 text-indigo-800 border border-indigo-200' : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                        }`}>
                                         {isVirtual ? <Video className="w-3 h-3" /> : <MapPin className="w-3 h-3" />}
                                         <span>{offer.modality || 'Presencial'}</span>
                                       </span>
@@ -4366,9 +4361,8 @@ export default function App() {
                                   <div className="space-y-2">
                                     <div className="flex items-center justify-between">
                                       <span className="text-xs font-bold text-slate-500">{ses.date} • {ses.time}</span>
-                                      <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase ${
-                                        isConfirmed ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                                      }`}>
+                                      <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase ${isConfirmed ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                                        }`}>
                                         {isConfirmed ? 'Confirmada' : 'Pendiente'}
                                       </span>
                                     </div>
@@ -4513,10 +4507,9 @@ export default function App() {
                           </td>
 
                           <td className="p-3.5 uppercase font-bold text-xs">
-                            <span className={`px-2.5 py-1 rounded-lg ${
-                              u.role === 'admin' ? 'bg-purple-100 text-purple-800 font-black' :
-                              u.role === 'tutor' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-800'
-                            }`}>
+                            <span className={`px-2.5 py-1 rounded-lg ${u.role === 'admin' ? 'bg-purple-100 text-purple-800 font-black' :
+                                u.role === 'tutor' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-800'
+                              }`}>
                               {u.role === 'admin' ? 'Super Admin' : u.role}
                             </span>
                           </td>
@@ -4534,11 +4527,10 @@ export default function App() {
                                 <button
                                   onClick={() => handleToggleUserStatus(u)}
                                   title={u.status === 'active' ? 'Suspender / Desactivar cuenta' : 'Activar cuenta de usuario'}
-                                  className={`p-2 rounded-xl transition shadow-xs border ${
-                                    u.status === 'active'
+                                  className={`p-2 rounded-xl transition shadow-xs border ${u.status === 'active'
                                       ? 'bg-amber-50 text-amber-700 hover:bg-amber-100 border-amber-200'
                                       : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200'
-                                  }`}
+                                    }`}
                                 >
                                   {u.status === 'active' ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
                                 </button>
@@ -5128,17 +5120,16 @@ export default function App() {
                                     onClick={() => {
                                       setCareerSemestersConfig(prev => {
                                         const updated = { ...prev, [newAdminSubCareer]: num };
-                                        try { localStorage.setItem('aura_career_semesters', JSON.stringify(updated)); } catch (e) {}
+                                        try { localStorage.setItem('aura_career_semesters', JSON.stringify(updated)); } catch (e) { }
                                         return updated;
                                       });
                                       if (newAdminSubSemester > num) setNewAdminSubSemester(num);
                                       showToast(`Pensum de ${newAdminSubCareer} ajustado a ${num} semestres`);
                                     }}
-                                    className={`w-8 h-8 rounded-lg font-black text-xs transition ${
-                                      (careerSemestersConfig[newAdminSubCareer] || 6) >= num
+                                    className={`w-8 h-8 rounded-lg font-black text-xs transition ${(careerSemestersConfig[newAdminSubCareer] || 6) >= num
                                         ? 'bg-blue-600 text-white shadow-xs'
                                         : 'bg-white border text-slate-400 hover:bg-slate-100'
-                                    }`}
+                                      }`}
                                     title={`Semestre ${num}`}
                                   >
                                     {num}
@@ -5918,8 +5909,8 @@ export default function App() {
                             if (!messagesSearchQuery.trim()) return true;
                             const q = messagesSearchQuery.toLowerCase();
                             return (s.subject || '').toLowerCase().includes(q) ||
-                                   (s.tutorName || '').toLowerCase().includes(q) ||
-                                   (s.studentName || '').toLowerCase().includes(q);
+                              (s.tutorName || '').toLowerCase().includes(q) ||
+                              (s.studentName || '').toLowerCase().includes(q);
                           })
                           .map(session => {
                             const isSelected = currentConversation && session.id === currentConversation.id;
@@ -5932,9 +5923,8 @@ export default function App() {
                               <div
                                 key={session.id}
                                 onClick={() => setActiveChatSession(session)}
-                                className={`p-3 rounded-2xl cursor-pointer transition flex items-center space-x-3 ${
-                                  isSelected ? 'bg-white shadow-xs border border-slate-200' : 'hover:bg-slate-100/70'
-                                }`}
+                                className={`p-3 rounded-2xl cursor-pointer transition flex items-center space-x-3 ${isSelected ? 'bg-white shadow-xs border border-slate-200' : 'hover:bg-slate-100/70'
+                                  }`}
                               >
                                 <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-200 border border-slate-300 flex items-center justify-center shrink-0">
                                   {otherParty?.avatar ? (
@@ -6024,11 +6014,10 @@ export default function App() {
                                 <span className="hidden sm:inline">Ficha</span>
                               </button>
                             )}
-                            <span className={`px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider ${
-                              currentConversation.status === 'completed'
+                            <span className={`px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider ${currentConversation.status === 'completed'
                                 ? 'bg-blue-100 text-blue-800'
                                 : 'bg-emerald-100 text-emerald-800'
-                            }`}>
+                              }`}>
                               {currentConversation.status === 'completed' ? 'Finalizada' : 'En Curso'}
                             </span>
                           </div>
@@ -6063,11 +6052,10 @@ export default function App() {
                                   className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
                                 >
                                   <div
-                                    className={`p-3.5 rounded-2xl text-xs sm:text-sm max-w-[82%] shadow-xs space-y-1 ${
-                                      isMe
+                                    className={`p-3.5 rounded-2xl text-xs sm:text-sm max-w-[82%] shadow-xs space-y-1 ${isMe
                                         ? 'text-white rounded-tr-none'
                                         : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none'
-                                    }`}
+                                      }`}
                                     style={isMe ? { backgroundColor: primaryColor } : {}}
                                   >
                                     <strong className={`block text-[11px] ${isMe ? 'text-white/80' : 'text-slate-500'}`}>
@@ -6131,7 +6119,7 @@ export default function App() {
               );
             })()}
 
-                        {activeTab === 'profile' && currentUser.role !== 'admin' && (
+            {activeTab === 'profile' && currentUser.role !== 'admin' && (
               <div className="space-y-6 max-w-4xl mx-auto">
                 {/* CABECERA DEL PERFIL */}
                 <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center gap-6">
@@ -6564,8 +6552,8 @@ export default function App() {
 
             {activeTab === 'find_tutors' && currentUser.role === 'student' && (() => {
               const studentCareerClean = (currentUser.career || '').trim().toLowerCase();
-              const tutorsForCareer = users.filter(u => 
-                u.role === 'tutor' && 
+              const tutorsForCareer = users.filter(u =>
+                u.role === 'tutor' &&
                 (!studentCareerClean || (u.career || '').trim().toLowerCase() === studentCareerClean)
               );
 
@@ -6664,7 +6652,7 @@ export default function App() {
             })()}
 
             {activeTab === 'sessions' && currentUser.role !== 'admin' && (() => {
-              const userSessions = sessions.filter(s => 
+              const userSessions = sessions.filter(s =>
                 currentUser.role === 'tutor' ? s.tutorId === currentUser.id : s.studentId === currentUser.id
               );
 
@@ -6704,11 +6692,10 @@ export default function App() {
                         <button
                           key={tab.key}
                           onClick={() => setSessionsFilterStatus(tab.key)}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-                            sessionsFilterStatus === tab.key
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${sessionsFilterStatus === tab.key
                               ? 'bg-slate-900 text-white shadow-xs'
                               : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                          }`}
+                            }`}
                         >
                           {tab.label}
                         </button>
@@ -6759,15 +6746,14 @@ export default function App() {
                                 </p>
                               </div>
 
-                              <span className={`self-start px-3 py-1 rounded-xl text-xs font-black uppercase tracking-wider shrink-0 ${
-                                isConfirmed ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
-                                isPending ? 'bg-amber-100 text-amber-800 border border-amber-200' :
-                                isCompleted ? 'bg-blue-100 text-blue-800 border border-blue-200' :
-                                'bg-red-100 text-red-800 border border-red-200'
-                              }`}>
+                              <span className={`self-start px-3 py-1 rounded-xl text-xs font-black uppercase tracking-wider shrink-0 ${isConfirmed ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
+                                  isPending ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                                    isCompleted ? 'bg-blue-100 text-blue-800 border border-blue-200' :
+                                      'bg-red-100 text-red-800 border border-red-200'
+                                }`}>
                                 {isConfirmed ? 'En Proceso / Confirmada' :
-                                 isPending ? 'Solicitud Pendiente' :
-                                 isCompleted ? 'Tutoría Finalizada' : 'Rechazada'}
+                                  isPending ? 'Solicitud Pendiente' :
+                                    isCompleted ? 'Tutoría Finalizada' : 'Rechazada'}
                               </span>
                             </div>
 
@@ -7024,11 +7010,10 @@ export default function App() {
                       {currentUser.role === 'tutor' && (
                         <button
                           onClick={() => setTutorOnlyMyReviews(!tutorOnlyMyReviews)}
-                          className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition flex items-center space-x-2 shrink-0 ${
-                            tutorOnlyMyReviews
+                          className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition flex items-center space-x-2 shrink-0 ${tutorOnlyMyReviews
                               ? 'bg-blue-600 text-white shadow-sm'
                               : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                          }`}
+                            }`}
                         >
                           <UserCheck className="w-4 h-4" />
                           <span>Solo mis reseñas ({myTutorReviewsCount})</span>
@@ -7040,11 +7025,10 @@ export default function App() {
                     <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
                       <button
                         onClick={() => setFilterReviewRating('')}
-                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition shrink-0 ${
-                          filterReviewRating === ''
+                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition shrink-0 ${filterReviewRating === ''
                             ? 'text-white shadow-sm'
                             : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                        }`}
+                          }`}
                         style={filterReviewRating === '' ? { backgroundColor: primaryColor } : {}}
                       >
                         Todas ({approvedReviews.length})
@@ -7056,11 +7040,10 @@ export default function App() {
                           <button
                             key={stars}
                             onClick={() => setFilterReviewRating(filterReviewRating === stars ? '' : stars)}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shrink-0 ${
-                              filterReviewRating === stars
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shrink-0 ${filterReviewRating === stars
                                 ? 'bg-amber-500 text-white shadow-sm'
                                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                            }`}
+                              }`}
                           >
                             <Star className="w-3.5 h-3.5 fill-current text-amber-400" />
                             <span>{stars} Estrellas ({count})</span>
@@ -7275,7 +7258,7 @@ export default function App() {
           </div>
 
           <div className="flex justify-end text-right pt-0.5">
-            <span className="text-[8px] text-slate-400 dark:text-slate-500 font-medium tracking-wide">
+            <span className="text-[3px] text-slate-400 dark:text-slate-500 font-medium tracking-wide">
               Jhonny ocariz 31.170.619
             </span>
           </div>
@@ -7341,7 +7324,7 @@ export default function App() {
                     s => s.tutorId === viewingTutorProfile.id && s.status === 'completed'
                   );
                   const successfulSubjectsModal = Array.from(new Set(completedForThisTutor.map(s => s.subject).filter(Boolean)));
-                  
+
                   return (
                     <div className="pt-2 border-t border-slate-100">
                       <strong className="block mb-2 uppercase font-extrabold text-xs tracking-wider text-slate-500">
@@ -7481,11 +7464,10 @@ export default function App() {
                   <div
                     key={n.id}
                     onClick={() => handleNotificationClick(n)}
-                    className={`p-3.5 rounded-2xl border text-sm space-y-1.5 cursor-pointer transition relative ${
-                      n.read
+                    className={`p-3.5 rounded-2xl border text-sm space-y-1.5 cursor-pointer transition relative ${n.read
                         ? 'bg-white border-slate-200 text-slate-600 opacity-75 hover:opacity-100 hover:border-slate-300'
                         : 'bg-blue-50/70 border-blue-200 text-slate-900 shadow-2xs hover:border-blue-300'
-                    }`}
+                      }`}
                   >
                     <div className="flex justify-between items-start gap-2">
                       <div className="flex items-center space-x-2 min-w-0">
@@ -7557,7 +7539,7 @@ export default function App() {
               const subjectsFromCatalog = catalogSubjects
                 .filter(s => (s.career || '').trim().toLowerCase() === tutorCareerClean)
                 .map(s => s.name);
-              
+
               const allAvailableSubjects = Array.from(new Set([
                 ...(selectedTutorForBooking.subjects || []),
                 ...((selectedTutorForBooking.subjectsDetailed || []).map(s => s.name)),
@@ -7978,7 +7960,7 @@ export default function App() {
           </div>
         </div>
       )}
-    
+
       {/* MODAL ELIMINAR CARRERA */}
       {showDeleteCareerModal && careerToDelete && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -8024,7 +8006,7 @@ export default function App() {
         </div>
       )}
 
-    
+
       {/* MODAL FICHA DETALLADA DEL ESTUDIANTE */}
       {selectedStudentForInfo && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
