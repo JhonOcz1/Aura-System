@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* =========================================================================
    ESTILOS GLOBALES Y MODO OSCURO - AURA ESTUDIANTIL v1.2
    ========================================================================= */
@@ -15,6 +17,19 @@ html.dark {
 /* Transición suave al cambiar de tema */
 body {
   transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+/* Inputs, selects y textareas por defecto en Modo Claro */
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+input[type="date"] {
+  color-scheme: light;
 }
 
 /* Adaptación global cuando está activo el Modo Oscuro */
@@ -88,6 +103,10 @@ html.dark textarea {
   background-color: #1e293b !important;
   border-color: #334155 !important;
   color: #f8fafc !important;
+}
+
+html.dark input[type="date"] {
+  color-scheme: dark;
 }
 
 html.dark input::placeholder,

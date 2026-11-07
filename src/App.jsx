@@ -3529,16 +3529,16 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
         {currentUser ? (
           <div>
-            <div className="bg-white dark:bg-slate-900 rounded-2xl p-2.5 sm:p-3 mb-6 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row gap-2.5 items-stretch md:items-center justify-between transition-colors">
-              <div className="flex items-center gap-2 overflow-x-auto pb-1.5 max-w-full scrollbar-none flex-wrap sm:flex-nowrap">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl p-2 sm:p-2.5 mb-6 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row gap-2 items-stretch md:items-center justify-between transition-colors">
+              <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto py-1 max-w-full scrollbar-none flex-nowrap sm:flex-wrap">
               <button
                 type="button"
                 onClick={() => setActiveTab('dashboard')}
-                className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-2 shrink-0 cursor-pointer ${activeTab === 'dashboard' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'dashboard' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
                 style={activeTab === 'dashboard' ? { backgroundColor: primaryColor } : {}}
-                title="Ir al Panel Principal de control"
+                title="Panel Principal de AURA Estudiantil"
               >
-                <Activity className="w-4 h-4 sm:w-4.5 sm:h-4.5 shrink-0" /> <span className="whitespace-nowrap">Panel Principal</span>
+                <Activity className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Panel</span>
               </button>
 
               {currentUser.role === 'admin' && (
@@ -3546,47 +3546,47 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setActiveTab('admin_users')}
-                    className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-2 shrink-0 cursor-pointer ${activeTab === 'admin_users' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                    className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'admin_users' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
                     style={activeTab === 'admin_users' ? { backgroundColor: primaryColor } : {}}
-                    title="Módulo RFADM01: Gestión, creación y auditoría de usuarios"
+                    title="RFADM01 - Gestión de Usuarios, Roles y Cuentas"
                   >
-                    <Users className="w-4.5 h-4.5 shrink-0" /> <span className="whitespace-nowrap">1. RFADM01 Usuarios</span>
+                    <Users className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Usuarios</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setActiveTab('admin_academic')}
-                    className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-2 shrink-0 cursor-pointer ${activeTab === 'admin_academic' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                    className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'admin_academic' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
                     style={activeTab === 'admin_academic' ? { backgroundColor: primaryColor } : {}}
-                    title="Módulo RFADM02: Catálogo académico, pensum, semestres, carreras y materias"
+                    title="RFADM02 - Catálogo Académico, Carreras, Materias y Pensum"
                   >
-                    <BookOpen className="w-4.5 h-4.5 shrink-0" /> <span className="whitespace-nowrap">2. RFADM02 Académico</span>
+                    <BookOpen className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Académico</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setActiveTab('admin_moderation')}
-                    className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-2 shrink-0 cursor-pointer ${activeTab === 'admin_moderation' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                    className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'admin_moderation' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
                     style={activeTab === 'admin_moderation' ? { backgroundColor: primaryColor } : {}}
-                    title="Módulo RFADM03: Moderación y revisión de reseñas comunitarias"
+                    title="RFADM03 - Moderación y Supervisión de Reseñas"
                   >
-                    <MessageSquareOff className="w-4.5 h-4.5 shrink-0" /> <span className="whitespace-nowrap">3. RFADM03 Moderación</span>
+                    <MessageSquareOff className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Moderación</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setActiveTab('admin_stats')}
-                    className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-2 shrink-0 cursor-pointer ${activeTab === 'admin_stats' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                    className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'admin_stats' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
                     style={activeTab === 'admin_stats' ? { backgroundColor: primaryColor } : {}}
-                    title="Módulo RFADM04: Filtros de métricas, demanda y rendimiento académico"
+                    title="RFADM04 - Estadísticas, Métricas y Filtros de Demanda"
                   >
-                    <BarChart3 className="w-4.5 h-4.5 shrink-0" /> <span className="whitespace-nowrap">4. RFADM04 Estadísticas</span>
+                    <BarChart3 className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Estadísticas</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setActiveTab('admin_security')}
-                    className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-2 shrink-0 cursor-pointer ${activeTab === 'admin_security' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                    className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'admin_security' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
                     style={activeTab === 'admin_security' ? { backgroundColor: primaryColor } : {}}
-                    title="Módulo RFADM05: Supervisión de seguridad, bitácora inmutable y exportación PDF"
+                    title="RFADM05 - Supervisión de Seguridad y Bitácora Inmutable en PDF"
                   >
-                    <ShieldCheck className="w-4.5 h-4.5 shrink-0" /> <span className="whitespace-nowrap">5. RFADM05 Seguridad</span>
+                    <ShieldCheck className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Seguridad</span>
                   </button>
                 </>
               )}
@@ -3595,11 +3595,11 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setActiveTab('find_tutors')}
-                  className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-2 shrink-0 cursor-pointer ${activeTab === 'find_tutors' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                  className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'find_tutors' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
                   style={activeTab === 'find_tutors' ? { backgroundColor: primaryColor } : {}}
                   title="Explorar el catálogo de tutores disponibles para agendar citas"
                 >
-                  <Search className="w-4.5 h-4.5 shrink-0" /> <span className="whitespace-nowrap">Buscar Tutores</span>
+                  <Search className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Tutores</span>
                 </button>
               )}
 
@@ -3607,11 +3607,11 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setActiveTab('sessions')}
-                  className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-2 shrink-0 cursor-pointer ${activeTab === 'sessions' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                  className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'sessions' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
                   style={activeTab === 'sessions' ? { backgroundColor: primaryColor } : {}}
                   title="Consultar mis citas, tutorías activas y solicitudes pendientes"
                 >
-                  <Calendar className="w-4.5 h-4.5 shrink-0" /> <span className="whitespace-nowrap">Tutorías</span>
+                  <Calendar className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Tutorías</span>
                 </button>
               )}
 
@@ -3628,11 +3628,11 @@ export default function App() {
                       if (userSessions.length > 0) setActiveChatSession(userSessions[0]);
                     }
                   }}
-                  className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-2 shrink-0 cursor-pointer ${activeTab === 'messages' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                  className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'messages' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
                   style={activeTab === 'messages' ? { backgroundColor: primaryColor } : {}}
                   title="Abrir el centro de mensajería institucional en vivo"
                 >
-                  <MessageCircle className="w-4.5 h-4.5 shrink-0" />
+                  <MessageCircle className="w-4 h-4 shrink-0" />
                   <span className="whitespace-nowrap">Mensajes</span>
                 </button>
               )}
@@ -3641,11 +3641,11 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setActiveTab('reviews')}
-                  className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-2 shrink-0 cursor-pointer ${activeTab === 'reviews' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                  className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'reviews' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
                   style={activeTab === 'reviews' ? { backgroundColor: primaryColor } : {}}
                   title="Ver valoraciones y reseñas académicas de tutores"
                 >
-                  <Star className="w-4.5 h-4.5 shrink-0" />
+                  <Star className="w-4 h-4 shrink-0" />
                   <span className="whitespace-nowrap">Reseñas</span>
                 </button>
               )}
@@ -3654,21 +3654,22 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setActiveTab('profile')}
-                  className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-2 shrink-0 cursor-pointer ${activeTab === 'profile' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                  className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'profile' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
                   style={activeTab === 'profile' ? { backgroundColor: primaryColor } : {}}
                   title="Ver y editar mis datos de perfil de usuario"
                 >
-                  <User className="w-4.5 h-4.5 shrink-0" /> <span className="whitespace-nowrap">Mi Perfil</span>
+                  <User className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Perfil</span>
                 </button>
               )}
               </div>
 
               {/* ROL EN LA BARRA DE NAVEGACIÓN PRINCIPAL */}
-              <div className="flex items-center justify-between md:justify-end shrink-0 pt-1 md:pt-0 border-t md:border-t-0 border-slate-100 dark:border-slate-800">
-                <div className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 shadow-2xs">
-                  <span className="text-[10px] uppercase font-extrabold text-slate-400 dark:text-slate-400">Rol:</span>
-                  <span className="font-black text-slate-900 dark:text-white uppercase">
-                    {currentUser.role === 'admin' ? 'Super Administrador' : currentUser.role === 'tutor' ? 'Tutor' : 'Estudiante'}
+              <div className="flex items-center justify-end shrink-0 pt-1 md:pt-0 border-t md:border-t-0 border-slate-100 dark:border-slate-800">
+                <div className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 shadow-2xs">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                  <span className="text-[10px] uppercase font-bold text-slate-400">Rol:</span>
+                  <span className="font-extrabold uppercase text-[11px] text-slate-900 dark:text-white">
+                    {currentUser.role === 'admin' ? 'Super Admin' : currentUser.role === 'tutor' ? 'Tutor' : 'Estudiante'}
                   </span>
                 </div>
               </div>
@@ -5383,7 +5384,8 @@ export default function App() {
                         type="date"
                         value={statsFilterStartDate}
                         onChange={(e) => setStatsFilterStartDate(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-xl text-xs font-semibold focus:ring-2 focus:ring-blue-500"
+                        style={{ colorScheme: isDarkMode ? 'dark' : 'light' }}
+                        className="w-full px-3 py-2 border rounded-xl text-xs font-semibold focus:ring-2 focus:ring-blue-500 bg-white text-slate-800 border-slate-300 dark:bg-slate-800 dark:text-white dark:border-slate-700 shadow-2xs transition-colors"
                         title="Seleccionar fecha inicial para el reporte"
                       />
                     </div>
@@ -5394,7 +5396,8 @@ export default function App() {
                         type="date"
                         value={statsFilterEndDate}
                         onChange={(e) => setStatsFilterEndDate(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-xl text-xs font-semibold focus:ring-2 focus:ring-blue-500"
+                        style={{ colorScheme: isDarkMode ? 'dark' : 'light' }}
+                        className="w-full px-3 py-2 border rounded-xl text-xs font-semibold focus:ring-2 focus:ring-blue-500 bg-white text-slate-800 border-slate-300 dark:bg-slate-800 dark:text-white dark:border-slate-700 shadow-2xs transition-colors"
                         title="Seleccionar fecha límite para el reporte"
                       />
                     </div>
@@ -5404,7 +5407,8 @@ export default function App() {
                       <select
                         value={statsFilterTimeSlot}
                         onChange={(e) => setStatsFilterTimeSlot(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-xl text-xs font-semibold focus:ring-2 focus:ring-blue-500"
+                        style={{ colorScheme: isDarkMode ? 'dark' : 'light' }}
+                        className="w-full px-3 py-2 border rounded-xl text-xs font-semibold focus:ring-2 focus:ring-blue-500 bg-white text-slate-800 border-slate-300 dark:bg-slate-800 dark:text-white dark:border-slate-700 shadow-2xs transition-colors"
                         title="Filtrar sesiones según el rango de horas del día"
                       >
                         <option value="all">Todos los Horarios</option>
@@ -5419,7 +5423,8 @@ export default function App() {
                       <select
                         value={statsFilterModality}
                         onChange={(e) => setStatsFilterModality(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-xl text-xs font-semibold focus:ring-2 focus:ring-blue-500"
+                        style={{ colorScheme: isDarkMode ? 'dark' : 'light' }}
+                        className="w-full px-3 py-2 border rounded-xl text-xs font-semibold focus:ring-2 focus:ring-blue-500 bg-white text-slate-800 border-slate-300 dark:bg-slate-800 dark:text-white dark:border-slate-700 shadow-2xs transition-colors"
                         title="Filtrar por sesiones presenciales o virtuales"
                       >
                         <option value="all">Todas las Modalidades</option>
@@ -5433,7 +5438,8 @@ export default function App() {
                       <select
                         value={statsFilterCareer}
                         onChange={(e) => setStatsFilterCareer(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-xl text-xs font-semibold focus:ring-2 focus:ring-blue-500"
+                        style={{ colorScheme: isDarkMode ? 'dark' : 'light' }}
+                        className="w-full px-3 py-2 border rounded-xl text-xs font-semibold focus:ring-2 focus:ring-blue-500 bg-white text-slate-800 border-slate-300 dark:bg-slate-800 dark:text-white dark:border-slate-700 shadow-2xs transition-colors"
                         title="Filtrar por carrera universitaria específica"
                       >
                         <option value="all">Todas las Carreras</option>
@@ -5448,7 +5454,8 @@ export default function App() {
                       <select
                         value={statsFilterStatus}
                         onChange={(e) => setStatsFilterStatus(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-xl text-xs font-semibold focus:ring-2 focus:ring-blue-500"
+                        style={{ colorScheme: isDarkMode ? 'dark' : 'light' }}
+                        className="w-full px-3 py-2 border rounded-xl text-xs font-semibold focus:ring-2 focus:ring-blue-500 bg-white text-slate-800 border-slate-300 dark:bg-slate-800 dark:text-white dark:border-slate-700 shadow-2xs transition-colors"
                         title="Filtrar por estatus académico de la tutoría"
                       >
                         <option value="all">Todos los Estados</option>
@@ -7096,93 +7103,55 @@ export default function App() {
         )}
       </main>
 
-      {/* PIE DE PÁGINA GENERAL (FOOTER V1.2) */}
-      <footer className="w-full mt-auto border-t border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md text-slate-700 dark:text-slate-300 transition-colors duration-300">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6 pb-6 border-b border-slate-200 dark:border-slate-800">
-            {/* Logo y Membrete */}
-            <div className="flex items-center space-x-3 text-center md:text-left">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-slate-800 p-1.5 flex items-center justify-center shrink-0 border border-slate-200 dark:border-slate-700 shadow-xs">
+      {/* PIE DE PÁGINA GENERAL (FOOTER CLÁSICO V1.2) */}
+      <footer className="w-full mt-auto border-t border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md text-slate-600 dark:text-slate-400 text-xs transition-colors duration-300">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-3.5">
+          {/* Fila Superior: Identidad, Versión, Modo de Pantalla y Membrete */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center space-x-2.5">
+              <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-slate-800 p-1 flex items-center justify-center shrink-0 border border-slate-200 dark:border-slate-700">
                 <img src={auraLogo} alt="AURA Logo" className="w-full h-full object-contain" />
               </div>
-              <div>
-                <div className="flex items-center space-x-2 justify-center md:justify-start">
-                  <h4 className="font-extrabold text-slate-900 dark:text-white text-base">AURA Estudiantil</h4>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                    Versión 1.2
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                  Instituto Universitario Jesús Obrero (IUJO) • Plataforma de Acompañamiento Académico y Tutorías
-                </p>
+              <div className="flex items-center space-x-2">
+                <span className="font-extrabold text-slate-800 dark:text-white text-sm">AURA Estudiantil</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                  Versión 1.2
+                </span>
               </div>
             </div>
 
-            {/* Acciones rápidas en footer */}
-            <div className="flex items-center space-x-2 text-xs font-semibold">
+            <div className="flex items-center space-x-3 text-xs">
               <button
                 type="button"
                 onClick={toggleDarkMode}
-                className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center space-x-1.5 cursor-pointer active:scale-95"
+                className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center space-x-1.5 cursor-pointer active:scale-95"
                 title={isDarkMode ? "Cambiar a Modo Claro (Luz)" : "Cambiar a Modo Oscuro"}
               >
-                {isDarkMode ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-slate-600 dark:text-slate-300" />}
-                <span>{isDarkMode ? 'Modo Claro' : 'Modo Oscuro'}</span>
+                {isDarkMode ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-slate-500" />}
+                <span className="text-[11px] font-semibold">{isDarkMode ? 'Modo Claro' : 'Modo Oscuro'}</span>
               </button>
               <span className="text-slate-300 dark:text-slate-700">|</span>
-              <span className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50 text-[11px] font-bold">
-                Sistema Operativo Activo
-              </span>
-            </div>
-          </div>
-
-          {/* Autores y Créditos */}
-          <div className="py-6 space-y-3">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <span className="text-xs font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                Equipo de Desarrollo y Autores del Sistema:
-              </span>
               <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                Proyecto de Grado / Desarrollo Tecnológico IUJO
+                Instituto Universitario Jesús Obrero • Caracas / Catia, Venezuela
               </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {[
-                { name: 'Angie Gutiérrez', ci: '29.992.946' },
-                { name: 'Daniel Guerrero', ci: '32.235.704' },
-                { name: 'Jendrix Hernández', ci: '32.652.588' },
-                { name: 'Gabriel Mendoza', ci: '29.675.720' }
-              ].map((author, idx) => (
-                <div
-                  key={idx}
-                  className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 flex items-center space-x-3 shadow-2xs hover:border-slate-300 dark:hover:border-slate-600 transition"
-                  title={`Autor del proyecto: ${author.name} (C.I: ${author.ci})`}
-                >
-                  <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 flex items-center justify-center font-bold text-xs shrink-0">
-                    {author.name.charAt(0)}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="font-extrabold text-xs text-slate-900 dark:text-slate-100 truncate">
-                      {author.name}
-                    </p>
-                    <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
-                      C.I: {author.ci}
-                    </p>
-                  </div>
-                </div>
-              ))}
             </div>
           </div>
 
-          {/* Copyright y Leyenda */}
-          <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 dark:text-slate-400 gap-2 text-center sm:text-left">
-            <p>
-              &copy; {new Date().getFullYear()} <strong className="text-slate-700 dark:text-slate-200">AURA Estudiantil</strong>. Todos los derechos reservados.
-            </p>
-            <p className="text-[11px]">
-              Instituto Universitario Jesús Obrero • Barquisimeto / Caracas / Catia, Venezuela
-            </p>
+          {/* Fila Clásica de Derechos y Autores */}
+          <div className="flex flex-col md:flex-row items-center justify-between gap-2.5 text-center md:text-left text-[11px] text-slate-500 dark:text-slate-400">
+            <div>
+              &copy; {new Date().getFullYear()} <strong className="text-slate-700 dark:text-slate-300 font-bold">AURA Estudiantil</strong>. Todos los derechos reservados.
+            </div>
+            <div className="flex flex-wrap justify-center md:justify-end items-center gap-x-2 gap-y-1">
+              <span className="font-bold text-slate-700 dark:text-slate-300">Autores:</span>
+              <span>Angie Gutiérrez (C.I: 29.992.946)</span>
+              <span className="text-slate-300 dark:text-slate-700">•</span>
+              <span>Daniel Guerrero (C.I: 32.235.704)</span>
+              <span className="text-slate-300 dark:text-slate-700">•</span>
+              <span>Jendrix Hernández (C.I: 32.652.588)</span>
+              <span className="text-slate-300 dark:text-slate-700">•</span>
+              <span>Gabriel Mendoza (C.I: 29.675.720)</span>
+            </div>
           </div>
         </div>
       </footer>
