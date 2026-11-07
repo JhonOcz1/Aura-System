@@ -1,0 +1,125 @@
+@import "tailwindcss";
+
+/* =========================================================================
+   ESTILOS GLOBALES Y MODO OSCURO - AURA ESTUDIANTIL v1.2
+   ========================================================================= */
+
+:root {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+/* Transición suave al cambiar de tema */
+body {
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+/* Adaptación global cuando está activo el Modo Oscuro */
+html.dark body {
+  background-color: #020617;
+  color: #f8fafc;
+}
+
+/* Tarjetas y contenedores con fondo blanco en modo oscuro */
+html.dark .bg-white {
+  background-color: #0f172a !important;
+  color: #f8fafc;
+}
+
+/* Fondos sutiles slate-50 / slate-100 en modo oscuro */
+html.dark .bg-slate-50,
+html.dark .bg-slate-50\/80,
+html.dark .bg-slate-50\/50,
+html.dark .bg-slate-50\/70 {
+  background-color: #1e293b !important;
+  color: #f1f5f9;
+}
+
+html.dark .bg-slate-100,
+html.dark .bg-slate-100\/60,
+html.dark .bg-slate-100\/80 {
+  background-color: #1e293b !important;
+  color: #f8fafc;
+}
+
+html.dark .bg-slate-200 {
+  background-color: #334155 !important;
+}
+
+/* Bordes en modo oscuro */
+html.dark .border,
+html.dark .border-slate-100,
+html.dark .border-slate-200,
+html.dark .border-slate-200\/70,
+html.dark .border-slate-200\/80,
+html.dark .border-slate-300 {
+  border-color: #334155 !important;
+}
+
+html.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-y > :not([hidden]) ~ :not([hidden]) {
+  border-color: #334155 !important;
+}
+
+/* Textos oscuros en modo oscuro */
+html.dark .text-slate-900,
+html.dark .text-slate-800,
+html.dark .text-slate-700 {
+  color: #f8fafc !important;
+}
+
+html.dark .text-slate-600,
+html.dark .text-slate-500 {
+  color: #94a3b8 !important;
+}
+
+html.dark .text-slate-400 {
+  color: #64748b !important;
+}
+
+/* Inputs, selects y textareas en modo oscuro */
+html.dark input:not([type="checkbox"]):not([type="radio"]),
+html.dark select,
+html.dark textarea {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #64748b !important;
+}
+
+/* Tablas y filas en modo oscuro */
+html.dark thead.bg-slate-50 {
+  background-color: #1e293b !important;
+  color: #cbd5e1 !important;
+}
+
+html.dark tr:hover td {
+  background-color: #1e293b/60;
+}
+
+/* Botones y hover en modo oscuro */
+html.dark .hover\:bg-slate-100:hover,
+html.dark .hover\:bg-slate-50:hover {
+  background-color: #334155 !important;
+}
+
+/* Modales y backdrop en modo oscuro */
+html.dark .bg-slate-900\/60 {
+  background-color: rgba(2, 6, 23, 0.8) !important;
+}
+
+/* Estilos de soporte para zoom 300% (Responsividad ultra-compacta) */
+@media (max-width: 480px) {
+  html {
+    font-size: 14px;
+  }
+}
+

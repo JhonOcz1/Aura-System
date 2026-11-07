@@ -6,7 +6,7 @@ import {
   Search, Calendar, Download, Filter, Star, PieChart, Camera,
   Palette, Clock, Trash2, ShieldAlert, MessageCircle, CheckCircle,
   XCircle, KeyRound, UserPlus, Bell, X, Mail, Lock, ChevronDown, ChevronRight, Save, Edit3, FileText,
-  TrendingUp, CheckCircle2, Clock3, Upload, UserCheck, UserX, AlertTriangle, Layers, Plus, FileSpreadsheet, Video, MapPin, ExternalLink, Info, Send, RefreshCw, ArrowLeft, CheckCheck
+  TrendingUp, CheckCircle2, Clock3, Upload, UserCheck, UserX, AlertTriangle, Layers, Plus, FileSpreadsheet, Video, MapPin, ExternalLink, Info, Send, RefreshCw, ArrowLeft, CheckCheck, Sun, Moon
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -663,6 +663,37 @@ export default function App() {
   const [activeSessionConflictUser, setActiveSessionConflictUser] = useState(null);
   const [regError, setRegError] = useState('');
   const lastActivityRef = useRef(Date.now());
+
+  // Control de Modo Oscuro / Modo Claro
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    try {
+      return localStorage.getItem('aura_theme') === 'dark';
+    } catch (e) {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      if (isDarkMode) {
+        document.documentElement.classList.add('dark');
+        localStorage.setItem('aura_theme', 'dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+        localStorage.setItem('aura_theme', 'light');
+      }
+    } catch (e) {}
+  }, [isDarkMode]);
+
+  const toggleDarkMode = () => setIsDarkMode(prev => !prev);
+
+  // Filtros interactivos para el Módulo de Estadísticas (admin_stats)
+  const [statsFilterStartDate, setStatsFilterStartDate] = useState('');
+  const [statsFilterEndDate, setStatsFilterEndDate] = useState('');
+  const [statsFilterTimeSlot, setStatsFilterTimeSlot] = useState('all'); // all, morning, afternoon, evening
+  const [statsFilterModality, setStatsFilterModality] = useState('all'); // all, Presencial, Virtual / Online
+  const [statsFilterCareer, setStatsFilterCareer] = useState('all'); // all, o nombre de carrera
+  const [statsFilterStatus, setStatsFilterStatus] = useState('all'); // all, completed, waiting, rejected
 
   // Formulario de edición de datos personales del perfil
   const [profileEditForm, setProfileEditForm] = useState({
@@ -3283,8 +3314,126 @@ export default function App() {
     };
   });
 
+  // Parseador de fechas para filtros de estadísticas
+  const getSessionDateObj = (s) => {
+    if (!s) return null;
+    if (s.date) {
+      if (/^\d{4}-\d{2}-\d{2}/.test(s.date)) {
+        return new Date(s.date.slice(0, 10) + 'T00:00:00');
+      }
+      if (/^\d{1,2}\/\d{1,2}\/\d{4}/.test(s.date)) {
+        const parts = s.date.split('/');
+        return new Date(`${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}T00:00:00`);
+      }
+    }
+    if (s.created_at) {
+      return new Date(s.created_at);
+    }
+    return null;
+  };
+
+  const getSessionTurn = (s) => {
+    if (!s || !s.time) return 'morning';
+    const t = s.time.toLowerCase();
+    const isPM = t.includes('pm') || t.includes('p.m.');
+    const match = t.match(/(\d{1,2}):/);
+    let hour = match ? parseInt(match[1], 10) : 8;
+    if (isPM && hour < 12) hour += 12;
+    if (!isPM && hour === 12) hour = 0;
+    if (hour < 12) return 'morning';
+    if (hour < 18) return 'afternoon';
+    return 'evening';
+  };
+
+  const hasActiveStatsFilters = Boolean(
+    statsFilterStartDate ||
+    statsFilterEndDate ||
+    statsFilterTimeSlot !== 'all' ||
+    statsFilterModality !== 'all' ||
+    statsFilterCareer !== 'all' ||
+    statsFilterStatus !== 'all'
+  );
+
+  const resetStatsFilters = () => {
+    setStatsFilterStartDate('');
+    setStatsFilterEndDate('');
+    setStatsFilterTimeSlot('all');
+    setStatsFilterModality('all');
+    setStatsFilterCareer('all');
+    setStatsFilterStatus('all');
+  };
+
+  const filteredStatsSessions = activeValidSessions.filter(s => {
+    if (statsFilterStartDate) {
+      const d = getSessionDateObj(s);
+      if (d && d < new Date(statsFilterStartDate + 'T00:00:00')) return false;
+    }
+    if (statsFilterEndDate) {
+      const d = getSessionDateObj(s);
+      if (d && d > new Date(statsFilterEndDate + 'T23:59:59')) return false;
+    }
+    if (statsFilterTimeSlot !== 'all') {
+      if (getSessionTurn(s) !== statsFilterTimeSlot) return false;
+    }
+    if (statsFilterModality !== 'all') {
+      if ((s.modality || 'Presencial') !== statsFilterModality) return false;
+    }
+    if (statsFilterCareer !== 'all') {
+      const c = getSessionCareer(s);
+      if (!c || c.toLowerCase() !== statsFilterCareer.toLowerCase()) return false;
+    }
+    if (statsFilterStatus !== 'all') {
+      if (statsFilterStatus === 'completed' && s.status !== 'completed') return false;
+      if (statsFilterStatus === 'waiting' && s.status !== 'pending' && s.status !== 'confirmed') return false;
+      if (statsFilterStatus === 'rejected' && s.status !== 'rejected') return false;
+    }
+    return true;
+  });
+
+  const statsTotalCount = filteredStatsSessions.length;
+  const statsCompletedCount = filteredStatsSessions.filter(s => s.status === 'completed').length;
+  const statsPendingCount = filteredStatsSessions.filter(s => s.status === 'pending').length;
+  const statsConfirmedCount = filteredStatsSessions.filter(s => s.status === 'confirmed').length;
+  const statsInWaitingCount = statsPendingCount + statsConfirmedCount;
+  const statsRejectedCount = filteredStatsSessions.filter(s => s.status === 'rejected').length;
+
+  const statsCompletedPct = statsTotalCount > 0 ? (statsCompletedCount / statsTotalCount) * 100 : 0;
+  const statsInWaitingPct = statsTotalCount > 0 ? (statsInWaitingCount / statsTotalCount) * 100 : 0;
+  const statsRejectedPct = statsTotalCount > 0 ? (statsRejectedCount / statsTotalCount) * 100 : 0;
+
+  const filteredCareerStats = (careers || []).map(career => {
+    const careerSessions = filteredStatsSessions.filter(s => getSessionCareer(s) === career.name);
+    const total = careerSessions.length;
+    const completed = careerSessions.filter(s => s.status === 'completed').length;
+    const pending = careerSessions.filter(s => s.status === 'pending').length;
+    const confirmed = careerSessions.filter(s => s.status === 'confirmed').length;
+    const inWaiting = pending + confirmed;
+    const rejected = careerSessions.filter(s => s.status === 'rejected').length;
+
+    const completedPct = total > 0 ? (completed / total) * 100 : 0;
+    const inWaitingPct = total > 0 ? (inWaiting / total) * 100 : 0;
+    const rejectedPct = total > 0 ? (rejected / total) * 100 : 0;
+    const shareOfTotal = statsTotalCount > 0 ? (total / statsTotalCount) * 100 : 0;
+
+    return {
+      id: career.id,
+      name: career.name,
+      code: career.code,
+      total,
+      completed,
+      inWaiting,
+      pending,
+      confirmed,
+      rejected,
+      completedPct,
+      inWaitingPct,
+      rejectedPct,
+      shareOfTotal
+    };
+  });
+
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-800 font-sans flex flex-col text-sm sm:text-base">
+    <div className={`min-h-screen font-sans flex flex-col text-sm sm:text-base transition-colors duration-300 ${isDarkMode ? 'dark bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-800'}`}>
       {toast && (
         <div className={`fixed top-4 right-4 z-50 px-5 py-3 rounded-xl shadow-2xl text-white text-sm font-semibold flex items-center space-x-2 ${toast.type === 'danger' ? 'bg-red-600' : 'bg-emerald-600'}`}>
           <AlertCircle className="w-5 h-5" />
@@ -3294,10 +3443,10 @@ export default function App() {
 
       {/* HEADER DINÁMICO */}
       <header className="text-white border-b border-black/10 sticky top-0 z-40 shadow-md transition-colors duration-300" style={{ backgroundColor: primaryColor }}>
-        <div className="max-w-7xl mx-auto px-2 sm:px-4 min-h-16 py-2 flex items-center justify-between gap-1">
+        <div className="max-w-7xl mx-auto px-2 sm:px-4 min-h-16 py-2 flex flex-wrap items-center justify-between gap-2">
 
           {/* SECCIÓN DEL LOGO Y TÍTULO */}
-          <div className="flex items-center space-x-2 cursor-pointer min-w-0 flex-grow" onClick={() => currentUser && setActiveTab('dashboard')}>
+          <div className="flex items-center space-x-2 cursor-pointer min-w-0" onClick={() => currentUser && setActiveTab('dashboard')} title="Ir a la pantalla principal">
             <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center overflow-hidden shadow-lg bg-white p-1 shrink-0">
               <img src={auraLogo} alt="Logo AURA" className="w-full h-full object-contain" />
             </div>
@@ -3315,90 +3464,160 @@ export default function App() {
             </div>
           </div>
 
-          {/* SECCIÓN DE BOTONES DE USUARIO */}
-          {currentUser && (
-            <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
-              {/* ROL EN LA BARRA SUPERIOR (ARRIBA) */}
-              <div className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-white/20 border border-white/30 text-white shadow-xs backdrop-blur-sm">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
-                <span className="text-[11px] sm:text-xs font-black uppercase tracking-wider">
-                  {currentUser.role === 'admin' ? 'Super Administrador' : currentUser.role === 'tutor' ? 'Tutor' : 'Estudiante'}
-                </span>
-              </div>
-              {currentUser.role !== 'admin' && (
-                <button onClick={() => setShowNotificationsModal(true)} className="relative p-1.5 sm:p-2 text-white/90 hover:text-white hover:bg-white/10 rounded-lg transition" title="Notificaciones">
-                  <Bell className="w-4.5 h-4.5 sm:w-5 sm:h-5 shrink-0" />
-                  {unreadNotifCount > 0 && (
-                    <span className="absolute top-0.5 right-0.5 w-3.5 h-3.5 bg-red-500 text-white rounded-full text-[9px] font-bold flex items-center justify-center shadow-sm">
-                      {unreadNotifCount}
-                    </span>
-                  )}
-                </button>
+          {/* SECCIÓN DE BOTONES DE USUARIO Y CONTROLES */}
+          <div className="flex items-center space-x-2 sm:space-x-3 shrink-0 flex-wrap">
+            {/* BOTÓN MODO OSCURO / MODO CLARO */}
+            <button
+              type="button"
+              onClick={toggleDarkMode}
+              className="p-1.5 sm:p-2 text-white/95 hover:text-white hover:bg-white/15 active:scale-95 rounded-xl transition-all flex items-center justify-center border border-white/25 shadow-xs backdrop-blur-sm cursor-pointer"
+              title={isDarkMode ? "Cambiar a Modo Claro" : "Cambiar a Modo Oscuro"}
+              aria-label="Alternar modo claro / oscuro"
+            >
+              {isDarkMode ? (
+                <Sun className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-amber-300 shrink-0" />
+              ) : (
+                <Moon className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-white shrink-0" />
               )}
+              <span className="text-xs font-bold hidden md:inline ml-1.5">
+                {isDarkMode ? 'Modo Claro' : 'Modo Oscuro'}
+              </span>
+            </button>
 
-              {currentUser.role !== 'admin' && (
-                <button onClick={() => setActiveTab('profile')} className={`flex items-center space-x-1.5 px-2 sm:px-4 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition ${activeTab === 'profile' ? 'bg-white/25 text-white' : 'text-white/90 hover:bg-white/10'}`}>
-                  {currentUser.avatar ? (
-                    <img src={currentUser.avatar} alt="Avatar" className="w-5 h-5 sm:w-6 sm:h-6 rounded-full object-cover border border-white shrink-0" />
-                  ) : (
-                    <User className="w-4.5 h-4.5 shrink-0" />
-                  )}
-                  <span className="hidden sm:inline whitespace-nowrap">Mi Perfil</span>
+            {currentUser && (
+              <>
+                {/* ROL EN LA BARRA SUPERIOR (ARRIBA) */}
+                <div className="flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 rounded-full bg-white/20 border border-white/30 text-white shadow-xs backdrop-blur-sm" title={`Tu rol activo: ${currentUser.role === 'admin' ? 'Super Administrador' : currentUser.role === 'tutor' ? 'Tutor Docente' : 'Estudiante Universitario'}`}>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
+                  <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider">
+                    {currentUser.role === 'admin' ? 'Super Administrador' : currentUser.role === 'tutor' ? 'Tutor' : 'Estudiante'}
+                  </span>
+                </div>
+
+                {currentUser.role !== 'admin' && (
+                  <button onClick={() => setShowNotificationsModal(true)} className="relative p-1.5 sm:p-2 text-white/90 hover:text-white hover:bg-white/15 active:scale-95 rounded-lg transition cursor-pointer" title="Bandeja de notificaciones y solicitudes de tutorías">
+                    <Bell className="w-4.5 h-4.5 sm:w-5 sm:h-5 shrink-0" />
+                    {unreadNotifCount > 0 && (
+                      <span className="absolute top-0.5 right-0.5 w-3.5 h-3.5 bg-red-500 text-white rounded-full text-[9px] font-bold flex items-center justify-center shadow-sm">
+                        {unreadNotifCount}
+                      </span>
+                    )}
+                  </button>
+                )}
+
+                {currentUser.role !== 'admin' && (
+                  <button onClick={() => setActiveTab('profile')} className={`flex items-center space-x-1.5 px-2 sm:px-4 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 cursor-pointer ${activeTab === 'profile' ? 'bg-white/25 text-white shadow-xs' : 'text-white/90 hover:bg-white/15'}`} title="Ver y gestionar mi perfil institucional">
+                    {currentUser.avatar ? (
+                      <img src={currentUser.avatar} alt="Avatar" className="w-5 h-5 sm:w-6 sm:h-6 rounded-full object-cover border border-white shrink-0" />
+                    ) : (
+                      <User className="w-4.5 h-4.5 shrink-0" />
+                    )}
+                    <span className="hidden sm:inline whitespace-nowrap">Mi Perfil</span>
+                  </button>
+                )}
+
+                <button onClick={handleLogout} className="p-1.5 sm:p-2 text-white/90 hover:text-red-200 hover:bg-white/15 active:scale-95 rounded-lg transition-all flex items-center cursor-pointer" title="Cerrar sesión de forma segura">
+                  <LogOut className="w-4.5 h-4.5 sm:w-5 sm:h-5 shrink-0" />
+                  <span className="text-sm font-semibold hidden md:inline ml-1 whitespace-nowrap">Salir</span>
                 </button>
-              )}
-
-              <button onClick={handleLogout} className="p-1.5 sm:p-2 text-white/90 hover:text-red-200 hover:bg-white/10 rounded-lg transition flex items-center" title="Salir">
-                <LogOut className="w-4.5 h-4.5 sm:w-5 sm:h-5 shrink-0" />
-                <span className="text-sm font-semibold hidden md:inline ml-1 whitespace-nowrap">Salir</span>
-              </button>
-            </div>
-          )}
+              </>
+            )}
+          </div>
 
         </div>
       </header>
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
         {currentUser ? (
           <div>
-            <div className="bg-white rounded-2xl p-2.5 sm:p-3 mb-6 border border-slate-200 shadow-sm flex flex-col md:flex-row gap-2.5 items-stretch md:items-center justify-between">
-              <div className="flex items-center gap-2 overflow-x-auto pb-1.5 max-w-full scrollbar-none">
-              <button onClick={() => setActiveTab('dashboard')} className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition flex items-center space-x-2 shrink-0 ${activeTab === 'dashboard' ? 'text-white shadow-md' : 'text-slate-700 hover:bg-slate-100'}`} style={activeTab === 'dashboard' ? { backgroundColor: primaryColor } : {}}>
+            <div className="bg-white dark:bg-slate-900 rounded-2xl p-2.5 sm:p-3 mb-6 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row gap-2.5 items-stretch md:items-center justify-between transition-colors">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1.5 max-w-full scrollbar-none flex-wrap sm:flex-nowrap">
+              <button
+                type="button"
+                onClick={() => setActiveTab('dashboard')}
+                className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-2 shrink-0 cursor-pointer ${activeTab === 'dashboard' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                style={activeTab === 'dashboard' ? { backgroundColor: primaryColor } : {}}
+                title="Ir al Panel Principal de control"
+              >
                 <Activity className="w-4 h-4 sm:w-4.5 sm:h-4.5 shrink-0" /> <span className="whitespace-nowrap">Panel Principal</span>
               </button>
 
               {currentUser.role === 'admin' && (
                 <>
-                  <button onClick={() => setActiveTab('admin_users')} className={`px-5 py-2.5 rounded-xl text-sm font-bold transition flex items-center space-x-2.5 shrink-0 ${activeTab === 'admin_users' ? 'text-white shadow-md' : 'text-slate-700 hover:bg-slate-100'}`} style={activeTab === 'admin_users' ? { backgroundColor: primaryColor } : {}}>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('admin_users')}
+                    className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-2 shrink-0 cursor-pointer ${activeTab === 'admin_users' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                    style={activeTab === 'admin_users' ? { backgroundColor: primaryColor } : {}}
+                    title="Módulo RFADM01: Gestión, creación y auditoría de usuarios"
+                  >
                     <Users className="w-4.5 h-4.5 shrink-0" /> <span className="whitespace-nowrap">1. RFADM01 Usuarios</span>
                   </button>
-                  <button onClick={() => setActiveTab('admin_academic')} className={`px-5 py-2.5 rounded-xl text-sm font-bold transition flex items-center space-x-2.5 shrink-0 ${activeTab === 'admin_academic' ? 'text-white shadow-md' : 'text-slate-700 hover:bg-slate-100'}`} style={activeTab === 'admin_academic' ? { backgroundColor: primaryColor } : {}}>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('admin_academic')}
+                    className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-2 shrink-0 cursor-pointer ${activeTab === 'admin_academic' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                    style={activeTab === 'admin_academic' ? { backgroundColor: primaryColor } : {}}
+                    title="Módulo RFADM02: Catálogo académico, pensum, semestres, carreras y materias"
+                  >
                     <BookOpen className="w-4.5 h-4.5 shrink-0" /> <span className="whitespace-nowrap">2. RFADM02 Académico</span>
                   </button>
-                  <button onClick={() => setActiveTab('admin_moderation')} className={`px-5 py-2.5 rounded-xl text-sm font-bold transition flex items-center space-x-2.5 shrink-0 ${activeTab === 'admin_moderation' ? 'text-white shadow-md' : 'text-slate-700 hover:bg-slate-100'}`} style={activeTab === 'admin_moderation' ? { backgroundColor: primaryColor } : {}}>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('admin_moderation')}
+                    className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-2 shrink-0 cursor-pointer ${activeTab === 'admin_moderation' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                    style={activeTab === 'admin_moderation' ? { backgroundColor: primaryColor } : {}}
+                    title="Módulo RFADM03: Moderación y revisión de reseñas comunitarias"
+                  >
                     <MessageSquareOff className="w-4.5 h-4.5 shrink-0" /> <span className="whitespace-nowrap">3. RFADM03 Moderación</span>
                   </button>
-                  <button onClick={() => setActiveTab('admin_stats')} className={`px-5 py-2.5 rounded-xl text-sm font-bold transition flex items-center space-x-2.5 shrink-0 ${activeTab === 'admin_stats' ? 'text-white shadow-md' : 'text-slate-700 hover:bg-slate-100'}`} style={activeTab === 'admin_stats' ? { backgroundColor: primaryColor } : {}}>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('admin_stats')}
+                    className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-2 shrink-0 cursor-pointer ${activeTab === 'admin_stats' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                    style={activeTab === 'admin_stats' ? { backgroundColor: primaryColor } : {}}
+                    title="Módulo RFADM04: Filtros de métricas, demanda y rendimiento académico"
+                  >
                     <BarChart3 className="w-4.5 h-4.5 shrink-0" /> <span className="whitespace-nowrap">4. RFADM04 Estadísticas</span>
                   </button>
-                  <button onClick={() => setActiveTab('admin_security')} className={`px-5 py-2.5 rounded-xl text-sm font-bold transition flex items-center space-x-2.5 shrink-0 ${activeTab === 'admin_security' ? 'text-white shadow-md' : 'text-slate-700 hover:bg-slate-100'}`} style={activeTab === 'admin_security' ? { backgroundColor: primaryColor } : {}}>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('admin_security')}
+                    className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-2 shrink-0 cursor-pointer ${activeTab === 'admin_security' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                    style={activeTab === 'admin_security' ? { backgroundColor: primaryColor } : {}}
+                    title="Módulo RFADM05: Supervisión de seguridad, bitácora inmutable y exportación PDF"
+                  >
                     <ShieldCheck className="w-4.5 h-4.5 shrink-0" /> <span className="whitespace-nowrap">5. RFADM05 Seguridad</span>
                   </button>
                 </>
               )}
 
               {currentUser.role === 'student' && (
-                <button onClick={() => setActiveTab('find_tutors')} className={`px-5 py-2.5 rounded-xl text-sm font-bold transition flex items-center space-x-2.5 shrink-0 ${activeTab === 'find_tutors' ? 'text-white shadow-md' : 'text-slate-700 hover:bg-slate-100'}`} style={activeTab === 'find_tutors' ? { backgroundColor: primaryColor } : {}}>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('find_tutors')}
+                  className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-2 shrink-0 cursor-pointer ${activeTab === 'find_tutors' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                  style={activeTab === 'find_tutors' ? { backgroundColor: primaryColor } : {}}
+                  title="Explorar el catálogo de tutores disponibles para agendar citas"
+                >
                   <Search className="w-4.5 h-4.5 shrink-0" /> <span className="whitespace-nowrap">Buscar Tutores</span>
                 </button>
               )}
 
               {currentUser.role !== 'admin' && (
-                <button onClick={() => setActiveTab('sessions')} className={`px-5 py-2.5 rounded-xl text-sm font-bold transition flex items-center space-x-2.5 shrink-0 ${activeTab === 'sessions' ? 'text-white shadow-md' : 'text-slate-700 hover:bg-slate-100'}`} style={activeTab === 'sessions' ? { backgroundColor: primaryColor } : {}}>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('sessions')}
+                  className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-2 shrink-0 cursor-pointer ${activeTab === 'sessions' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                  style={activeTab === 'sessions' ? { backgroundColor: primaryColor } : {}}
+                  title="Consultar mis citas, tutorías activas y solicitudes pendientes"
+                >
                   <Calendar className="w-4.5 h-4.5 shrink-0" /> <span className="whitespace-nowrap">Tutorías</span>
                 </button>
               )}
 
               {currentUser.role !== 'admin' && (
                 <button
+                  type="button"
                   onClick={() => {
                     setActiveTab('messages');
                     if (!activeChatSession) {
@@ -3409,8 +3628,9 @@ export default function App() {
                       if (userSessions.length > 0) setActiveChatSession(userSessions[0]);
                     }
                   }}
-                  className={`px-5 py-2.5 rounded-xl text-sm font-bold transition flex items-center space-x-2.5 shrink-0 ${activeTab === 'messages' ? 'text-white shadow-md' : 'text-slate-700 hover:bg-slate-100'}`}
+                  className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-2 shrink-0 cursor-pointer ${activeTab === 'messages' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
                   style={activeTab === 'messages' ? { backgroundColor: primaryColor } : {}}
+                  title="Abrir el centro de mensajería institucional en vivo"
                 >
                   <MessageCircle className="w-4.5 h-4.5 shrink-0" />
                   <span className="whitespace-nowrap">Mensajes</span>
@@ -3419,9 +3639,11 @@ export default function App() {
 
               {currentUser.role !== 'admin' && (
                 <button
+                  type="button"
                   onClick={() => setActiveTab('reviews')}
-                  className={`px-5 py-2.5 rounded-xl text-sm font-bold transition flex items-center space-x-2.5 shrink-0 ${activeTab === 'reviews' ? 'text-white shadow-md' : 'text-slate-700 hover:bg-slate-100'}`}
+                  className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-2 shrink-0 cursor-pointer ${activeTab === 'reviews' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
                   style={activeTab === 'reviews' ? { backgroundColor: primaryColor } : {}}
+                  title="Ver valoraciones y reseñas académicas de tutores"
                 >
                   <Star className="w-4.5 h-4.5 shrink-0" />
                   <span className="whitespace-nowrap">Reseñas</span>
@@ -3429,17 +3651,23 @@ export default function App() {
               )}
 
               {currentUser.role !== 'admin' && (
-                <button onClick={() => setActiveTab('profile')} className={`px-5 py-2.5 rounded-xl text-sm font-bold transition flex items-center space-x-2.5 shrink-0 ${activeTab === 'profile' ? 'text-white shadow-md' : 'text-slate-700 hover:bg-slate-100'}`} style={activeTab === 'profile' ? { backgroundColor: primaryColor } : {}}>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('profile')}
+                  className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-2 shrink-0 cursor-pointer ${activeTab === 'profile' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                  style={activeTab === 'profile' ? { backgroundColor: primaryColor } : {}}
+                  title="Ver y editar mis datos de perfil de usuario"
+                >
                   <User className="w-4.5 h-4.5 shrink-0" /> <span className="whitespace-nowrap">Mi Perfil</span>
                 </button>
               )}
               </div>
 
               {/* ROL EN LA BARRA DE NAVEGACIÓN PRINCIPAL */}
-              <div className="flex items-center justify-between md:justify-end shrink-0 pt-1 md:pt-0 border-t md:border-t-0 border-slate-100">
-                <div className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700 shadow-2xs">
-                  <span className="text-[10px] uppercase font-extrabold text-slate-400">Rol:</span>
-                  <span className="font-black text-slate-900 uppercase">
+              <div className="flex items-center justify-between md:justify-end shrink-0 pt-1 md:pt-0 border-t md:border-t-0 border-slate-100 dark:border-slate-800">
+                <div className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 shadow-2xs">
+                  <span className="text-[10px] uppercase font-extrabold text-slate-400 dark:text-slate-400">Rol:</span>
+                  <span className="font-black text-slate-900 dark:text-white uppercase">
                     {currentUser.role === 'admin' ? 'Super Administrador' : currentUser.role === 'tutor' ? 'Tutor' : 'Estudiante'}
                   </span>
                 </div>
@@ -4959,37 +5187,45 @@ export default function App() {
 
             {activeTab === 'admin_stats' && currentUser.role === 'admin' && (
               <div className="space-y-6">
-                <div className="bg-white p-6 rounded-3xl border shadow-sm flex justify-between items-center">
-                  <h2 className="text-xl font-black text-slate-800">RFADM04 - Panel de Estadísticas y Demanda</h2>
-                  <button onClick={() => exportDataToCSV('estadisticas_demanda', sessions)} className="px-3.5 py-2 bg-slate-100 text-slate-700 font-bold text-sm rounded-xl flex items-center space-x-1.5 hover:bg-slate-200 transition">
-                    <Download className="w-4.5 h-4.5" /> <span>Exportar Métricas CSV</span>
+                <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition-colors">
+                  <div>
+                    <h2 className="text-xl font-black text-slate-800 dark:text-white">RFADM04 - Panel de Estadísticas y Demanda</h2>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Analítica descriptiva, filtrado temporal e histórico de sesiones de tutoría.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => exportDataToCSV('estadisticas_demanda_filtrada', filteredStatsSessions)}
+                    className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 font-bold text-sm rounded-xl flex items-center space-x-2 transition cursor-pointer shadow-xs active:scale-95"
+                    title="Exportar archivo CSV con las métricas y registros de tutorías según el filtro actual"
+                  >
+                    <Download className="w-4.5 h-4.5" /> <span>Exportar Métricas CSV ({filteredStatsSessions.length})</span>
                   </button>
                 </div>
 
                 {/* 3 CONTADORES PRINCIPALES */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                  <div className="bg-white p-6 rounded-3xl border shadow-sm space-y-2">
-                    <span className="text-xs font-bold text-slate-500 uppercase">VOLUMEN DE USUARIOS</span>
-                    <h3 className="text-4xl font-black text-slate-900">{totalNonAdminUsersCount}</h3>
-                    <p className="text-sm text-emerald-700 font-bold">Comunidad Activa</p>
+                  <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-2 transition-colors">
+                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">VOLUMEN DE USUARIOS</span>
+                    <h3 className="text-4xl font-black text-slate-900 dark:text-white">{totalNonAdminUsersCount}</h3>
+                    <p className="text-sm text-emerald-700 dark:text-emerald-400 font-bold">Comunidad Activa</p>
                   </div>
-                  <div className="bg-white p-6 rounded-3xl border shadow-sm space-y-2">
-                    <span className="text-xs font-bold text-slate-500 uppercase">ESTUDIANTES ACTIVOS</span>
-                    <h3 className="text-4xl font-black text-slate-900">{activeStudentsCount}</h3>
+                  <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-2 transition-colors">
+                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">ESTUDIANTES ACTIVOS</span>
+                    <h3 className="text-4xl font-black text-slate-900 dark:text-white">{activeStudentsCount}</h3>
                     <p className="text-sm font-bold" style={{ color: primaryColor }}>Estudiantes registrados</p>
                   </div>
-                  <div className="bg-white p-6 rounded-3xl border shadow-sm space-y-2">
-                    <span className="text-xs font-bold text-slate-500 uppercase">TUTORES ACTIVOS</span>
-                    <h3 className="text-4xl font-black text-slate-900">{activeTutorsCount}</h3>
-                    <p className="text-sm text-amber-700 font-bold">Docentes activos</p>
+                  <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-2 transition-colors">
+                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">TUTORES ACTIVOS</span>
+                    <h3 className="text-4xl font-black text-slate-900 dark:text-white">{activeTutorsCount}</h3>
+                    <p className="text-sm text-amber-700 dark:text-amber-400 font-bold">Docentes activos</p>
                   </div>
                 </div>
 
                 {/* GRÁFICA CIRCULAR DEBAJO DE LOS CONTADORES */}
-                <div className="bg-white p-6 sm:p-8 rounded-3xl border shadow-sm space-y-6">
-                  <div className="flex items-center space-x-2.5 border-b pb-3.5">
+                <div className="bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-6 transition-colors">
+                  <div className="flex items-center space-x-2.5 border-b border-slate-100 dark:border-slate-800 pb-3.5">
                     <PieChart className="w-5 h-5" style={{ color: primaryColor }} />
-                    <h3 className="font-bold text-lg text-slate-800">Distribución Porcentual de la Comunidad</h3>
+                    <h3 className="font-bold text-lg text-slate-800 dark:text-white">Distribución Porcentual de la Comunidad</h3>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
@@ -5018,7 +5254,7 @@ export default function App() {
                           />
                         </svg>
                         <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                          <span className="text-2xl font-black text-slate-800">{totalNonAdminUsersCount}</span>
+                          <span className="text-2xl font-black text-slate-800 dark:text-white">{totalNonAdminUsersCount}</span>
                           <span className="text-xs font-bold text-slate-400 uppercase">Total Activos</span>
                         </div>
                       </div>
@@ -5026,28 +5262,28 @@ export default function App() {
 
                     {/* Leyenda y datos detallados */}
                     <div className="space-y-4">
-                      <p className="text-sm text-slate-600">Proporción actual entre estudiantes registrados y tutores docentes activos en la plataforma.</p>
+                      <p className="text-sm text-slate-600 dark:text-slate-400">Proporción actual entre estudiantes registrados y tutores docentes activos en la plataforma.</p>
 
                       <div className="space-y-3">
-                        <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between">
+                        <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl flex items-center justify-between">
                           <div className="flex items-center space-x-3">
                             <div className="w-4 h-4 rounded-full" style={{ backgroundColor: primaryColor }}></div>
-                            <span className="font-bold text-sm text-slate-700">Estudiantes Activos</span>
+                            <span className="font-bold text-sm text-slate-700 dark:text-slate-300">Estudiantes Activos</span>
                           </div>
                           <div className="text-right">
-                            <span className="font-black text-slate-900 text-base">{activeStudentsCount}</span>
-                            <span className="text-xs text-slate-500 block">({studentPercentage.toFixed(1)}%)</span>
+                            <span className="font-black text-slate-900 dark:text-white text-base">{activeStudentsCount}</span>
+                            <span className="text-xs text-slate-500 dark:text-slate-400 block">({studentPercentage.toFixed(1)}%)</span>
                           </div>
                         </div>
 
-                        <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between">
+                        <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl flex items-center justify-between">
                           <div className="flex items-center space-x-3">
                             <div className="w-4 h-4 rounded-full bg-amber-500"></div>
-                            <span className="font-bold text-sm text-slate-700">Tutores Activos</span>
+                            <span className="font-bold text-sm text-slate-700 dark:text-slate-300">Tutores Activos</span>
                           </div>
                           <div className="text-right">
-                            <span className="font-black text-slate-900 text-base">{activeTutorsCount}</span>
-                            <span className="text-xs text-slate-500 block">({tutorPercentage.toFixed(1)}%)</span>
+                            <span className="font-black text-slate-900 dark:text-white text-base">{activeTutorsCount}</span>
+                            <span className="text-xs text-slate-500 dark:text-slate-400 block">({tutorPercentage.toFixed(1)}%)</span>
                           </div>
                         </div>
                       </div>
@@ -5055,109 +5291,290 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* MÓDULO DE DEMANDA Y RENDIMIENTO DE TUTORÍAS POR CARRERA */}
-                <div className="bg-white p-6 sm:p-8 rounded-3xl border shadow-sm space-y-6">
-                  {/* Encabezado del Módulo */}
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b pb-4 gap-3">
+                {/* PANEL DE CONTROL DE FILTRADO DINÁMICO */}
+                <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-5 transition-colors">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 dark:border-slate-800 pb-3.5">
                     <div className="flex items-center space-x-3">
-                      <div className="p-2.5 rounded-2xl bg-blue-50 shrink-0" style={{ color: primaryColor }}>
-                        <TrendingUp className="w-6 h-6" />
+                      <div className="p-2.5 rounded-2xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 shrink-0">
+                        <Filter className="w-5 h-5" />
                       </div>
                       <div>
-                        <h3 className="font-extrabold text-xl text-slate-900">Demanda y Rendimiento de Tutorías</h3>
-                        <p className="text-xs sm:text-sm text-slate-500 font-medium">
-                          Métricas globales y distribución de clases académicas solicitadas por carrera en el sistema.
+                        <h3 className="font-black text-base sm:text-lg text-slate-900 dark:text-white">Filtro Dinámico de Estadísticas y Fechas</h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Ajusta los parámetros para analizar el desempeño por fecha, año, trimestre, turno, modalidad o carrera.
                         </p>
                       </div>
                     </div>
-                    <span className="px-4 py-2 rounded-xl text-xs sm:text-sm font-extrabold bg-slate-100 text-slate-700 border shadow-xs shrink-0">
-                      Total: {totalSessionsCount} Tutorías Registradas
+
+                    {hasActiveStatsFilters && (
+                      <button
+                        type="button"
+                        onClick={resetStatsFilters}
+                        className="px-3.5 py-1.5 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800 font-bold text-xs rounded-xl flex items-center space-x-1.5 transition cursor-pointer active:scale-95 shrink-0"
+                        title="Restablecer todos los filtros y volver a ver el histórico total"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Restablecer Filtros</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Botones de Selección Rápida (Presets de Años y Períodos) */}
+                  <div className="space-y-2">
+                    <span className="text-[11px] font-black uppercase text-slate-400 tracking-wider">Períodos y Años Rápidos:</span>
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1 flex-wrap text-xs font-bold">
+                      <button
+                        type="button"
+                        onClick={() => { setStatsFilterStartDate(''); setStatsFilterEndDate(''); }}
+                        className={`px-3.5 py-1.5 rounded-xl border transition cursor-pointer active:scale-95 ${!statsFilterStartDate && !statsFilterEndDate ? 'bg-blue-600 text-white border-blue-600 shadow-xs' : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+                        title="Ver todo el historial general registrado"
+                      >
+                        Histórico Completo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setStatsFilterStartDate('2026-01-01'); setStatsFilterEndDate('2026-12-31'); }}
+                        className={`px-3.5 py-1.5 rounded-xl border transition cursor-pointer active:scale-95 ${statsFilterStartDate === '2026-01-01' && statsFilterEndDate === '2026-12-31' ? 'bg-blue-600 text-white border-blue-600 shadow-xs' : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+                        title="Filtrar todas las tutorías correspondientes al año 2026"
+                      >
+                        Año 2026
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setStatsFilterStartDate('2027-01-01'); setStatsFilterEndDate('2027-12-31'); }}
+                        className={`px-3.5 py-1.5 rounded-xl border transition cursor-pointer active:scale-95 ${statsFilterStartDate === '2027-01-01' && statsFilterEndDate === '2027-12-31' ? 'bg-blue-600 text-white border-blue-600 shadow-xs' : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+                        title="Filtrar todas las tutorías correspondientes al año 2027"
+                      >
+                        Año 2027
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const year = new Date().getFullYear();
+                          setStatsFilterStartDate(`${year}-08-01`);
+                          setStatsFilterEndDate(`${year}-10-31`);
+                        }}
+                        className={`px-3.5 py-1.5 rounded-xl border transition cursor-pointer active:scale-95 ${statsFilterStartDate?.endsWith('-08-01') && statsFilterEndDate?.endsWith('-10-31') ? 'bg-blue-600 text-white border-blue-600 shadow-xs' : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+                        title="Filtrar tutorías del período académico de Agosto a Octubre"
+                      >
+                        Agosto - Octubre
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const now = new Date();
+                          const past30 = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
+                          setStatsFilterStartDate(past30.toISOString().split('T')[0]);
+                          setStatsFilterEndDate(now.toISOString().split('T')[0]);
+                        }}
+                        className="px-3.5 py-1.5 rounded-xl border bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition cursor-pointer active:scale-95"
+                        title="Filtrar tutorías de los últimos 30 días calendario"
+                      >
+                        Últimos 30 días
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Campos de Filtro Detallados */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">Fecha Desde</label>
+                      <input
+                        type="date"
+                        value={statsFilterStartDate}
+                        onChange={(e) => setStatsFilterStartDate(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-xl text-xs font-semibold focus:ring-2 focus:ring-blue-500"
+                        title="Seleccionar fecha inicial para el reporte"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">Fecha Hasta</label>
+                      <input
+                        type="date"
+                        value={statsFilterEndDate}
+                        onChange={(e) => setStatsFilterEndDate(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-xl text-xs font-semibold focus:ring-2 focus:ring-blue-500"
+                        title="Seleccionar fecha límite para el reporte"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">Turno / Horario</label>
+                      <select
+                        value={statsFilterTimeSlot}
+                        onChange={(e) => setStatsFilterTimeSlot(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-xl text-xs font-semibold focus:ring-2 focus:ring-blue-500"
+                        title="Filtrar sesiones según el rango de horas del día"
+                      >
+                        <option value="all">Todos los Horarios</option>
+                        <option value="morning">Mañana (07:00 - 12:00)</option>
+                        <option value="afternoon">Tarde (12:00 - 18:00)</option>
+                        <option value="evening">Noche (18:00 - 23:00)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">Modalidad</label>
+                      <select
+                        value={statsFilterModality}
+                        onChange={(e) => setStatsFilterModality(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-xl text-xs font-semibold focus:ring-2 focus:ring-blue-500"
+                        title="Filtrar por sesiones presenciales o virtuales"
+                      >
+                        <option value="all">Todas las Modalidades</option>
+                        <option value="presencial">Presencial (Sede IUJO)</option>
+                        <option value="virtual">Virtual (Online)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">Carrera</label>
+                      <select
+                        value={statsFilterCareer}
+                        onChange={(e) => setStatsFilterCareer(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-xl text-xs font-semibold focus:ring-2 focus:ring-blue-500"
+                        title="Filtrar por carrera universitaria específica"
+                      >
+                        <option value="all">Todas las Carreras</option>
+                        {careers.map((car) => (
+                          <option key={car.id} value={car.name}>{car.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">Estado Tutoría</label>
+                      <select
+                        value={statsFilterStatus}
+                        onChange={(e) => setStatsFilterStatus(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-xl text-xs font-semibold focus:ring-2 focus:ring-blue-500"
+                        title="Filtrar por estatus académico de la tutoría"
+                      >
+                        <option value="all">Todos los Estados</option>
+                        <option value="completed">Completadas con éxito</option>
+                        <option value="waiting">En período de espera</option>
+                        <option value="rejected">No completadas</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Resumen del filtro activo */}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-1 gap-2">
+                    <span>
+                      Mostrando <strong className="text-slate-900 dark:text-white font-bold">{statsTotalCount}</strong> tutorías filtradas (de un total de <strong className="text-slate-700 dark:text-slate-300 font-semibold">{sessions.length}</strong> registradas en el sistema).
+                    </span>
+                    {hasActiveStatsFilters && (
+                      <span className="px-2.5 py-1 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-[11px] font-bold">
+                        Filtro Activo
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* MÓDULO DE DEMANDA Y RENDIMIENTO DE TUTORÍAS POR CARRERA */}
+                <div className="bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-6 transition-colors">
+                  {/* Encabezado del Módulo */}
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-100 dark:border-slate-800 pb-4 gap-3">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2.5 rounded-2xl bg-blue-50 dark:bg-blue-950/40 shrink-0" style={{ color: primaryColor }}>
+                        <TrendingUp className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h3 className="font-extrabold text-xl text-slate-900 dark:text-white">Demanda y Rendimiento de Tutorías</h3>
+                        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">
+                          Métricas globales y distribución de clases académicas solicitadas por carrera según los filtros activos.
+                        </p>
+                      </div>
+                    </div>
+                    <span className="px-4 py-2 rounded-xl text-xs sm:text-sm font-extrabold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 shadow-xs shrink-0">
+                      Total Evaluado: {statsTotalCount} Tutorías
                     </span>
                   </div>
 
                   {/* 4 Tarjetas de Métricas Generales */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     {/* Total */}
-                    <div className="p-5 rounded-2xl border bg-slate-50 flex flex-col justify-between shadow-xs">
+                    <div className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex flex-col justify-between shadow-xs transition-colors">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-black uppercase text-slate-500 tracking-wider">TUTORÍAS EN GENERAL</span>
+                        <span className="text-xs font-black uppercase text-slate-500 dark:text-slate-400 tracking-wider">TUTORÍAS EN GENERAL</span>
                         <BookOpen className="w-5 h-5 text-slate-400" />
                       </div>
                       <div className="my-2">
-                        <span className="text-3xl font-black text-slate-900">{totalSessionsCount}</span>
+                        <span className="text-3xl font-black text-slate-900 dark:text-white">{statsTotalCount}</span>
                       </div>
-                      <span className="text-xs font-bold text-slate-600">Total en la plataforma</span>
+                      <span className="text-xs font-bold text-slate-600 dark:text-slate-400">Total en el período filtrado</span>
                     </div>
 
                     {/* Exitosas / Completadas */}
-                    <div className="p-5 rounded-2xl border border-emerald-200 bg-emerald-50/50 flex flex-col justify-between shadow-xs">
+                    <div className="p-5 rounded-2xl border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/50 dark:bg-emerald-950/30 flex flex-col justify-between shadow-xs transition-colors">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-black uppercase text-emerald-800 tracking-wider">COMPLETADAS CON ÉXITO</span>
-                        <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                        <span className="text-xs font-black uppercase text-emerald-800 dark:text-emerald-400 tracking-wider">COMPLETADAS CON ÉXITO</span>
+                        <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                       </div>
                       <div className="my-2 flex items-baseline space-x-2">
-                        <span className="text-3xl font-black text-emerald-700">{completedSessionsCount}</span>
-                        <span className="text-xs font-black text-emerald-600">({completedPctGeneral.toFixed(1)}%)</span>
+                        <span className="text-3xl font-black text-emerald-700 dark:text-emerald-300">{statsCompletedCount}</span>
+                        <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">({statsCompletedPct.toFixed(1)}%)</span>
                       </div>
-                      <span className="text-xs font-bold text-emerald-700">Impartidas satisfactoriamente</span>
+                      <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">Impartidas satisfactoriamente</span>
                     </div>
 
                     {/* En espera / Por realizarse */}
-                    <div className="p-5 rounded-2xl border border-amber-200 bg-amber-50/50 flex flex-col justify-between shadow-xs">
+                    <div className="p-5 rounded-2xl border border-amber-200 dark:border-amber-800/60 bg-amber-50/50 dark:bg-amber-950/30 flex flex-col justify-between shadow-xs transition-colors">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-black uppercase text-amber-800 tracking-wider">EN PERÍODO DE ESPERA</span>
-                        <Clock3 className="w-5 h-5 text-amber-600" />
+                        <span className="text-xs font-black uppercase text-amber-800 dark:text-amber-400 tracking-wider">EN PERÍODO DE ESPERA</span>
+                        <Clock3 className="w-5 h-5 text-amber-600 dark:text-amber-400" />
                       </div>
                       <div className="my-2 flex items-baseline space-x-2">
-                        <span className="text-3xl font-black text-amber-700">{inWaitingSessionsCount}</span>
-                        <span className="text-xs font-black text-amber-600">({inWaitingPctGeneral.toFixed(1)}%)</span>
+                        <span className="text-3xl font-black text-amber-700 dark:text-amber-300">{statsInWaitingCount}</span>
+                        <span className="text-xs font-black text-amber-600 dark:text-amber-400">({statsInWaitingPct.toFixed(1)}%)</span>
                       </div>
-                      <span className="text-xs font-bold text-amber-700">Pendientes y confirmadas</span>
+                      <span className="text-xs font-bold text-amber-700 dark:text-amber-400">Pendientes y confirmadas</span>
                     </div>
 
                     {/* No completadas / Rechazadas */}
-                    <div className="p-5 rounded-2xl border border-rose-200 bg-rose-50/50 flex flex-col justify-between shadow-xs">
+                    <div className="p-5 rounded-2xl border border-rose-200 dark:border-rose-800/60 bg-rose-50/50 dark:bg-rose-950/30 flex flex-col justify-between shadow-xs transition-colors">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-black uppercase text-rose-800 tracking-wider">NO COMPLETADAS</span>
-                        <XCircle className="w-5 h-5 text-rose-600" />
+                        <span className="text-xs font-black uppercase text-rose-800 dark:text-rose-400 tracking-wider">NO COMPLETADAS</span>
+                        <XCircle className="w-5 h-5 text-rose-600 dark:text-rose-400" />
                       </div>
                       <div className="my-2 flex items-baseline space-x-2">
-                        <span className="text-3xl font-black text-rose-700">{rejectedSessionsCount}</span>
-                        <span className="text-xs font-black text-rose-600">({rejectedPctGeneral.toFixed(1)}%)</span>
+                        <span className="text-3xl font-black text-rose-700 dark:text-rose-300">{statsRejectedCount}</span>
+                        <span className="text-xs font-black text-rose-600 dark:text-rose-400">({statsRejectedPct.toFixed(1)}%)</span>
                       </div>
-                      <span className="text-xs font-bold text-rose-700">Rechazadas o canceladas</span>
+                      <span className="text-xs font-bold text-rose-700 dark:text-rose-400">Rechazadas o canceladas</span>
                     </div>
                   </div>
 
                   {/* Barra Global de Balance de Estados */}
-                  <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50 space-y-3">
-                    <div className="flex justify-between items-center text-xs font-bold uppercase text-slate-600">
+                  <div className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 space-y-3 transition-colors">
+                    <div className="flex justify-between items-center text-xs font-bold uppercase text-slate-600 dark:text-slate-400">
                       <span>Balance Global de Efectividad de Tutorías</span>
-                      <span>{totalSessionsCount} Clases en Total</span>
+                      <span>{statsTotalCount} Clases Evaluadas</span>
                     </div>
-                    {totalSessionsCount > 0 ? (
-                      <div className="w-full h-4 bg-slate-200 rounded-full overflow-hidden flex shadow-inner">
-                        <div style={{ width: `${completedPctGeneral}%` }} className="bg-emerald-500 h-full transition-all duration-500" title={`Completadas con éxito: ${completedSessionsCount} (${completedPctGeneral.toFixed(1)}%)`} />
-                        <div style={{ width: `${inWaitingPctGeneral}%` }} className="bg-amber-400 h-full transition-all duration-500" title={`En espera: ${inWaitingSessionsCount} (${inWaitingPctGeneral.toFixed(1)}%)`} />
-                        <div style={{ width: `${rejectedPctGeneral}%` }} className="bg-rose-500 h-full transition-all duration-500" title={`No completadas: ${rejectedSessionsCount} (${rejectedPctGeneral.toFixed(1)}%)`} />
+                    {statsTotalCount > 0 ? (
+                      <div className="w-full h-4 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden flex shadow-inner">
+                        <div style={{ width: `${statsCompletedPct}%` }} className="bg-emerald-500 h-full transition-all duration-500" title={`Completadas con éxito: ${statsCompletedCount} (${statsCompletedPct.toFixed(1)}%)`} />
+                        <div style={{ width: `${statsInWaitingPct}%` }} className="bg-amber-400 h-full transition-all duration-500" title={`En espera: ${statsInWaitingCount} (${statsInWaitingPct.toFixed(1)}%)`} />
+                        <div style={{ width: `${statsRejectedPct}%` }} className="bg-rose-500 h-full transition-all duration-500" title={`No completadas: ${statsRejectedCount} (${statsRejectedPct.toFixed(1)}%)`} />
                       </div>
                     ) : (
-                      <div className="w-full h-4 bg-slate-200 rounded-full flex items-center justify-center text-[10px] text-slate-500 font-bold">
-                        Sin tutorías registradas aún en el sistema
+                      <div className="w-full h-4 bg-slate-200 dark:bg-slate-700 rounded-full flex items-center justify-center text-[10px] text-slate-500 dark:text-slate-400 font-bold">
+                        Sin tutorías que coincidan con los filtros seleccionados
                       </div>
                     )}
-                    <div className="flex flex-wrap items-center justify-between text-xs font-semibold text-slate-600 pt-1 gap-2">
+                    <div className="flex flex-wrap items-center justify-between text-xs font-semibold text-slate-600 dark:text-slate-400 pt-1 gap-2">
                       <div className="flex items-center space-x-2">
                         <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block" />
-                        <span>Completadas con éxito ({completedSessionsCount}) • {completedPctGeneral.toFixed(1)}%</span>
+                        <span>Completadas con éxito ({statsCompletedCount}) • {statsCompletedPct.toFixed(1)}%</span>
                       </div>
                       <div className="flex items-center space-x-2">
                         <span className="w-3 h-3 rounded-full bg-amber-400 inline-block" />
-                        <span>En período de espera ({inWaitingSessionsCount}) • {inWaitingPctGeneral.toFixed(1)}%</span>
+                        <span>En período de espera ({statsInWaitingCount}) • {statsInWaitingPct.toFixed(1)}%</span>
                       </div>
                       <div className="flex items-center space-x-2">
                         <span className="w-3 h-3 rounded-full bg-rose-500 inline-block" />
-                        <span>No completadas ({rejectedSessionsCount}) • {rejectedPctGeneral.toFixed(1)}%</span>
+                        <span>No completadas ({statsRejectedCount}) • {statsRejectedPct.toFixed(1)}%</span>
                       </div>
                     </div>
                   </div>
@@ -5166,53 +5583,53 @@ export default function App() {
                   <div className="space-y-4 pt-2">
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                       <div>
-                        <h4 className="font-extrabold text-base sm:text-lg text-slate-800">
+                        <h4 className="font-extrabold text-base sm:text-lg text-slate-800 dark:text-white">
                           Distribución y Métricas por Carrera
                         </h4>
-                        <p className="text-xs text-slate-500 font-medium">
-                          Detalle analítico de demanda y efectividad según las materias y clases activas de cada carrera.
+                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                          Detalle analítico de demanda y efectividad según las materias y clases activas de cada carrera bajo el filtro activo.
                         </p>
                       </div>
-                      <span className="text-xs text-slate-500 font-bold bg-slate-100 px-3 py-1.5 rounded-xl border">
-                        {careerStats.length} carreras evaluadas
+                      <span className="text-xs text-slate-500 dark:text-slate-400 font-bold bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700">
+                        {filteredCareerStats.length} carreras evaluadas
                       </span>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {careerStats.map((c) => (
-                        <div key={c.id} className="p-5 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 transition-all shadow-xs space-y-3.5 flex flex-col justify-between">
+                      {filteredCareerStats.map((c) => (
+                        <div key={c.id} className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700 transition-all shadow-xs space-y-3.5 flex flex-col justify-between">
                           <div className="space-y-3">
                             {/* Cabecera de Carrera */}
                             <div className="flex items-center justify-between">
                               <div className="flex items-center space-x-2.5 min-w-0">
-                                <span className="font-black px-2.5 py-1 bg-slate-100 border rounded-lg text-xs tracking-wider" style={{ color: primaryColor }}>
+                                <span className="font-black px-2.5 py-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs tracking-wider" style={{ color: primaryColor }}>
                                   {c.code || 'CAR'}
                                 </span>
-                                <span className="font-extrabold text-slate-900 text-sm sm:text-base truncate">
+                                <span className="font-extrabold text-slate-900 dark:text-white text-sm sm:text-base truncate">
                                   {c.name}
                                 </span>
                               </div>
-                              <span className={`px-3 py-1 rounded-full text-xs font-black shrink-0 ${c.total > 0 ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-500'}`}>
+                              <span className={`px-3 py-1 rounded-full text-xs font-black shrink-0 ${c.total > 0 ? 'bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
                                 {c.total} {c.total === 1 ? 'tutoría' : 'tutorías'}
                               </span>
                             </div>
 
                             {/* Frase Descriptiva Dinámica */}
-                            <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs text-slate-700 leading-relaxed font-medium">
+                            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
                               {c.total > 0 ? (
                                 <span>
-                                  En <strong className="text-slate-900">{c.name}</strong> hay <strong className="text-slate-900">{c.total}</strong> {c.total === 1 ? 'tutoría registrada' : 'tutorías registradas'}, de las cuales <strong className="text-emerald-700">{c.completed}</strong> se {c.completed === 1 ? 'realizó' : 'realizaron'} con éxito, <strong className="text-amber-700">{c.inWaiting}</strong> {c.inWaiting === 1 ? 'está' : 'están'} en período de espera para realizarse y <strong className="text-rose-700">{c.rejected}</strong> no se {c.rejected === 1 ? 'completó' : 'completaron'}.
+                                  En <strong className="text-slate-900 dark:text-white">{c.name}</strong> hay <strong className="text-slate-900 dark:text-white">{c.total}</strong> {c.total === 1 ? 'tutoría registrada' : 'tutorías registradas'}, de las cuales <strong className="text-emerald-700 dark:text-emerald-400">{c.completed}</strong> se {c.completed === 1 ? 'realizó' : 'realizaron'} con éxito, <strong className="text-amber-700 dark:text-amber-400">{c.inWaiting}</strong> {c.inWaiting === 1 ? 'está' : 'están'} en período de espera para realizarse y <strong className="text-rose-700 dark:text-rose-400">{c.rejected}</strong> no se {c.rejected === 1 ? 'completó' : 'completaron'}.
                                 </span>
                               ) : (
-                                <span className="text-slate-500 italic">
-                                  En <strong className="text-slate-700">{c.name}</strong> no se registran solicitudes de tutorías hasta el momento.
+                                <span className="text-slate-500 dark:text-slate-400 italic">
+                                  En <strong className="text-slate-700 dark:text-slate-300">{c.name}</strong> no se registran solicitudes de tutorías en el rango o filtro seleccionado.
                                 </span>
                               )}
                             </div>
 
                             {/* Mini Barra de Distribución Proporcional */}
                             <div className="space-y-1">
-                              <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden flex">
+                              <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex">
                                 {c.total > 0 ? (
                                   <>
                                     <div style={{ width: `${c.completedPct}%` }} className="bg-emerald-500 h-full" title={`Exitosas: ${c.completed} (${c.completedPct.toFixed(0)}%)`} />
@@ -5220,7 +5637,7 @@ export default function App() {
                                     <div style={{ width: `${c.rejectedPct}%` }} className="bg-rose-500 h-full" title={`No completadas: ${c.rejected} (${c.rejectedPct.toFixed(0)}%)`} />
                                   </>
                                 ) : (
-                                  <div className="w-full bg-slate-200 h-full" />
+                                  <div className="w-full bg-slate-200 dark:bg-slate-700 h-full" />
                                 )}
                               </div>
                             </div>
@@ -5228,17 +5645,17 @@ export default function App() {
 
                           {/* 3 Badges de Estados Detallados */}
                           <div className="grid grid-cols-3 gap-2 pt-1 text-center">
-                            <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-100">
-                              <span className="block text-[10px] font-black uppercase text-emerald-800">Exitosas</span>
-                              <span className="text-sm font-black text-emerald-700">{c.completed}</span>
+                            <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-800/60">
+                              <span className="block text-[10px] font-black uppercase text-emerald-800 dark:text-emerald-400">Exitosas</span>
+                              <span className="text-sm font-black text-emerald-700 dark:text-emerald-300">{c.completed}</span>
                             </div>
-                            <div className="p-2 rounded-xl bg-amber-50 border border-amber-100">
-                              <span className="block text-[10px] font-black uppercase text-amber-800">En Espera</span>
-                              <span className="text-sm font-black text-amber-700">{c.inWaiting}</span>
+                            <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-800/60">
+                              <span className="block text-[10px] font-black uppercase text-amber-800 dark:text-amber-400">En Espera</span>
+                              <span className="text-sm font-black text-amber-700 dark:text-amber-300">{c.inWaiting}</span>
                             </div>
-                            <div className="p-2 rounded-xl bg-rose-50 border border-rose-100">
-                              <span className="block text-[10px] font-black uppercase text-rose-800">No Realizadas</span>
-                              <span className="text-sm font-black text-rose-700">{c.rejected}</span>
+                            <div className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-800/60">
+                              <span className="block text-[10px] font-black uppercase text-rose-800 dark:text-rose-400">No Realizadas</span>
+                              <span className="text-sm font-black text-rose-700 dark:text-rose-300">{c.rejected}</span>
                             </div>
                           </div>
                         </div>
@@ -6601,35 +7018,36 @@ export default function App() {
         ) : (
           <div className="max-w-xl mx-auto my-6">
             {authView === 'login' && (
-              <div className="bg-white p-8 sm:p-10 rounded-3xl shadow-xl border border-slate-200 space-y-6">
+              <div className="bg-white dark:bg-slate-900 p-8 sm:p-10 rounded-3xl shadow-xl border border-slate-200 dark:border-slate-800 space-y-6 transition-colors">
                 <div className="text-center space-y-2">
                   <div className="w-16 h-16 bg-white rounded-2xl shadow-md p-1.5 flex items-center justify-center mx-auto mb-4 border border-slate-100">
                     <img src={auraLogo} alt="Logo Central AURA" className="w-full h-full object-contain" />
                   </div>
-                  <h2 className="text-2xl font-black text-slate-800">AURA Estudiantil</h2>
-                  <p className="text-sm text-slate-500">Instituto Universitario Jesús Obrero</p>
+                  <h2 className="text-2xl font-black text-slate-800 dark:text-white">AURA Estudiantil</h2>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Instituto Universitario Jesús Obrero</p>
                 </div>
 
                 {loginError && (
-                  <div className="bg-red-50 text-red-700 text-sm font-bold p-3.5 rounded-xl border border-red-200 flex items-start space-x-2">
+                  <div className="bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 text-sm font-bold p-3.5 rounded-xl border border-red-200 dark:border-red-800 flex items-start space-x-2">
                     <AlertCircle className="w-4.5 h-4.5 shrink-0 mt-0.5" />
                     <span className="leading-snug">{loginError}</span>
                   </div>
                 )}
 
                 {activeSessionConflictUser && (
-                  <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 space-y-2.5 text-xs shadow-xs">
-                    <div className="flex items-center space-x-2 font-black text-amber-800 text-sm">
-                      <AlertTriangle className="w-4.5 h-4.5 text-amber-600 shrink-0" />
+                  <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 space-y-2.5 text-xs shadow-xs">
+                    <div className="flex items-center space-x-2 font-black text-amber-800 dark:text-amber-300 text-sm">
+                      <AlertTriangle className="w-4.5 h-4.5 text-amber-600 dark:text-amber-400 shrink-0" />
                       <span>Sesión activa detectada en otro dispositivo</span>
                     </div>
-                    <p className="text-amber-800 leading-relaxed font-medium">
+                    <p className="text-amber-800 dark:text-amber-200 leading-relaxed font-medium">
                       Esta cuenta ya tiene una sesión abierta en otro celular o equipo. Si no tienes acceso a ese dispositivo o lo dejaste abierto, puedes cerrar la sesión remota para acceder en este equipo:
                     </p>
                     <button
                       type="button"
                       onClick={handleForceLogin}
-                      className="w-full py-2.5 px-3 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl transition shadow-xs text-xs flex items-center justify-center space-x-1.5"
+                      className="w-full py-2.5 px-3 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl transition shadow-xs text-xs flex items-center justify-center space-x-1.5 cursor-pointer active:scale-95"
+                      title="Cerrar la sesión remota y permitir el inicio de sesión aquí"
                     >
                       <ShieldAlert className="w-4 h-4" />
                       <span>Cerrar sesión en el otro equipo e ingresar aquí</span>
@@ -6639,31 +7057,31 @@ export default function App() {
 
                 <form onSubmit={handleLogin} className="space-y-6">
                   <div>
-                    <label className="block text-xs font-bold uppercase text-slate-600 mb-1.5">Correo Electrónico</label>
+                    <label className="block text-xs font-bold uppercase text-slate-600 dark:text-slate-400 mb-1.5">Correo Electrónico</label>
                     <div className="relative">
                       <Mail className="w-4.5 h-4.5 absolute left-3.5 top-3.5 text-slate-400" />
-                      <input type="email" required placeholder="aura@gmail.com" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className="w-full pl-10 pr-4 py-3 border rounded-xl text-sm" />
+                      <input type="email" required placeholder="aura@gmail.com" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className="w-full pl-10 pr-4 py-3 border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-xl text-sm focus:ring-2 focus:ring-blue-500" />
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold uppercase text-slate-600 mb-1.5">Contraseña</label>
+                    <label className="block text-xs font-bold uppercase text-slate-600 dark:text-slate-400 mb-1.5">Contraseña</label>
                     <div className="relative">
                       <Lock className="w-4.5 h-4.5 absolute left-3.5 top-3.5 text-slate-400" />
-                      <input type={showLoginPass ? 'text' : 'password'} required placeholder="••••••••" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} className="w-full pl-10 pr-11 py-3 border rounded-xl text-sm" />
-                      <button type="button" onClick={() => setShowLoginPass(!showLoginPass)} className="absolute right-3.5 top-3.5 text-slate-400 hover:text-slate-600">
+                      <input type={showLoginPass ? 'text' : 'password'} required placeholder="••••••••" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} className="w-full pl-10 pr-11 py-3 border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-xl text-sm focus:ring-2 focus:ring-blue-500" />
+                      <button type="button" onClick={() => setShowLoginPass(!showLoginPass)} className="absolute right-3.5 top-3.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" title={showLoginPass ? "Ocultar contraseña" : "Ver contraseña"}>
                         {showLoginPass ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
                       </button>
                     </div>
                   </div>
-                  <button type="submit" className="w-full text-white font-bold py-3.5 rounded-xl shadow-lg transition flex items-center justify-center space-x-2 hover:opacity-90 text-sm" style={{ backgroundColor: primaryColor }}>
+                  <button type="submit" className="w-full text-white font-bold py-3.5 rounded-xl shadow-lg transition flex items-center justify-center space-x-2 hover:opacity-90 active:scale-95 text-sm cursor-pointer" style={{ backgroundColor: primaryColor }} title="Acceder a tu cuenta en el sistema institucional">
                     <KeyRound className="w-4.5 h-4.5" />
                     <span>Iniciar Sesión</span>
                   </button>
                 </form>
 
-                <div className="text-center border-t pt-4">
-                  <p className="text-sm text-slate-600">¿No tienes cuenta en el sistema?</p>
-                  <button onClick={() => setAuthView('register')} className="mt-2 font-bold text-sm hover:underline flex items-center justify-center space-x-1 mx-auto" style={{ color: primaryColor }}>
+                <div className="text-center border-t border-slate-100 dark:border-slate-800 pt-4">
+                  <p className="text-sm text-slate-600 dark:text-slate-400">¿No tienes cuenta en el sistema?</p>
+                  <button onClick={() => setAuthView('register')} className="mt-2 font-bold text-sm hover:underline flex items-center justify-center space-x-1 mx-auto cursor-pointer" style={{ color: primaryColor }} title="Crear una cuenta nueva como estudiante o tutor">
                     <UserPlus className="w-4.5 h-4.5" />
                     <span>Regístrate aquí</span>
                   </button>
@@ -6677,6 +7095,97 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* PIE DE PÁGINA GENERAL (FOOTER V1.2) */}
+      <footer className="w-full mt-auto border-t border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md text-slate-700 dark:text-slate-300 transition-colors duration-300">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6 pb-6 border-b border-slate-200 dark:border-slate-800">
+            {/* Logo y Membrete */}
+            <div className="flex items-center space-x-3 text-center md:text-left">
+              <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-slate-800 p-1.5 flex items-center justify-center shrink-0 border border-slate-200 dark:border-slate-700 shadow-xs">
+                <img src={auraLogo} alt="AURA Logo" className="w-full h-full object-contain" />
+              </div>
+              <div>
+                <div className="flex items-center space-x-2 justify-center md:justify-start">
+                  <h4 className="font-extrabold text-slate-900 dark:text-white text-base">AURA Estudiantil</h4>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                    Versión 1.2
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                  Instituto Universitario Jesús Obrero (IUJO) • Plataforma de Acompañamiento Académico y Tutorías
+                </p>
+              </div>
+            </div>
+
+            {/* Acciones rápidas en footer */}
+            <div className="flex items-center space-x-2 text-xs font-semibold">
+              <button
+                type="button"
+                onClick={toggleDarkMode}
+                className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center space-x-1.5 cursor-pointer active:scale-95"
+                title={isDarkMode ? "Cambiar a Modo Claro (Luz)" : "Cambiar a Modo Oscuro"}
+              >
+                {isDarkMode ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-slate-600 dark:text-slate-300" />}
+                <span>{isDarkMode ? 'Modo Claro' : 'Modo Oscuro'}</span>
+              </button>
+              <span className="text-slate-300 dark:text-slate-700">|</span>
+              <span className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50 text-[11px] font-bold">
+                Sistema Operativo Activo
+              </span>
+            </div>
+          </div>
+
+          {/* Autores y Créditos */}
+          <div className="py-6 space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <span className="text-xs font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                Equipo de Desarrollo y Autores del Sistema:
+              </span>
+              <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                Proyecto de Grado / Desarrollo Tecnológico IUJO
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {[
+                { name: 'Angie Gutiérrez', ci: '29.992.946' },
+                { name: 'Daniel Guerrero', ci: '32.235.704' },
+                { name: 'Jendrix Hernández', ci: '32.652.588' },
+                { name: 'Gabriel Mendoza', ci: '29.675.720' }
+              ].map((author, idx) => (
+                <div
+                  key={idx}
+                  className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 flex items-center space-x-3 shadow-2xs hover:border-slate-300 dark:hover:border-slate-600 transition"
+                  title={`Autor del proyecto: ${author.name} (C.I: ${author.ci})`}
+                >
+                  <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 flex items-center justify-center font-bold text-xs shrink-0">
+                    {author.name.charAt(0)}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-extrabold text-xs text-slate-900 dark:text-slate-100 truncate">
+                      {author.name}
+                    </p>
+                    <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                      C.I: {author.ci}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Copyright y Leyenda */}
+          <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 dark:text-slate-400 gap-2 text-center sm:text-left">
+            <p>
+              &copy; {new Date().getFullYear()} <strong className="text-slate-700 dark:text-slate-200">AURA Estudiantil</strong>. Todos los derechos reservados.
+            </p>
+            <p className="text-[11px]">
+              Instituto Universitario Jesús Obrero • Barquisimeto / Caracas / Catia, Venezuela
+            </p>
+          </div>
+        </div>
+      </footer>
 
       {/* MODAL DETALLE DE TUTOR Y COMENTARIOS */}
       {viewingTutorProfile && (() => {
