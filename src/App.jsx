@@ -5,8 +5,8 @@ import {
   Check, Activity, Users, MessageSquareOff, BarChart3, ShieldCheck,
   Search, Calendar, Download, Filter, Star, PieChart, Camera,
   Palette, Clock, Trash2, ShieldAlert, MessageCircle, CheckCircle,
-  XCircle, KeyRound, UserPlus, Bell, X, Mail, Lock, ChevronDown, ChevronUp, ChevronRight, Save, Edit3, FileText,
-  TrendingUp, CheckCircle2, Clock3, Upload, UserCheck, UserX, AlertTriangle, Layers, Plus, FileSpreadsheet, Video, MapPin, ExternalLink, Info, Send, RefreshCw, ArrowLeft, CheckCheck, Sun, Moon
+  XCircle, KeyRound, UserPlus, Bell, X, Mail, Lock, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, Menu, Save, Edit3, FileText,
+  TrendingUp, CheckCircle2, Clock3, Upload, UserCheck, UserX, AlertTriangle, Layers, Plus, FileSpreadsheet, Video, MapPin, ExternalLink, Info, Send, RefreshCw, ArrowLeft, CheckCheck, Sun, Moon, Zap
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -822,6 +822,110 @@ export default function App() {
   const [profileNewPass, setProfileNewPass] = useState('');
   const [profileConfirmPass, setProfileConfirmPass] = useState('');
   const [showProfileNewPass, setShowProfileNewPass] = useState(false);
+
+  // Estados y lógica para barra de navegación movible (arrastrable) y Side Var (Barra lateral)
+  const [showSidebar, setShowSidebar] = useState(false);
+  const navTabsRef = useRef(null);
+  const [isDraggingTabs, setIsDraggingTabs] = useState(false);
+  const [dragStartX, setDragStartX] = useState(0);
+  const [dragScrollLeft, setDragScrollLeft] = useState(0);
+
+  const handleMouseDownTabs = (e) => {
+    if (!navTabsRef.current) return;
+    setIsDraggingTabs(true);
+    setDragStartX(e.pageX - navTabsRef.current.offsetLeft);
+    setDragScrollLeft(navTabsRef.current.scrollLeft);
+  };
+  const handleMouseLeaveTabs = () => setIsDraggingTabs(false);
+  const handleMouseUpTabs = () => setIsDraggingTabs(false);
+  const handleMouseMoveTabs = (e) => {
+    if (!isDraggingTabs || !navTabsRef.current) return;
+    e.preventDefault();
+    const x = e.pageX - navTabsRef.current.offsetLeft;
+    const walk = (x - dragStartX) * 1.6;
+    navTabsRef.current.scrollLeft = dragScrollLeft - walk;
+  };
+  const scrollTabs = (offset) => {
+    if (navTabsRef.current) {
+      navTabsRef.current.scrollBy({ left: offset, behavior: 'smooth' });
+    }
+  };
+
+  const getNavigationModules = () => {
+    if (!currentUser) return [];
+    if (currentUser.role === 'admin') {
+      return [
+        { id: 'dashboard', label: 'Panel', fullName: 'Panel Principal', icon: Activity, shortcut: 'Alt+0' },
+        { id: 'admin_users', label: 'Usuarios', fullName: 'RFADM01 Usuarios', icon: Users, shortcut: 'Alt+1' },
+        { id: 'admin_academic', label: 'Académico', fullName: 'RFADM02 Académico', icon: BookOpen, shortcut: 'Alt+2' },
+        { id: 'admin_moderation', label: 'Moderación', fullName: 'RFADM03 Moderación', icon: MessageSquareOff, shortcut: 'Alt+3' },
+        { id: 'admin_stats', label: 'Estadísticas', fullName: 'RFADM04 Estadísticas', icon: BarChart3, shortcut: 'Alt+4' },
+        { id: 'admin_security', label: 'Seguridad', fullName: 'RFADM05 Seguridad', icon: ShieldCheck, shortcut: 'Alt+5' },
+      ];
+    }
+    if (currentUser.role === 'student') {
+      return [
+        { id: 'dashboard', label: 'Panel', fullName: 'Panel Principal', icon: Activity, shortcut: 'Alt+1' },
+        { id: 'find_tutors', label: 'Tutores', fullName: 'Buscar Tutores', icon: Search, shortcut: 'Alt+2' },
+        { id: 'sessions', label: 'Tutorías', fullName: 'Mis Tutorías', icon: Calendar, shortcut: 'Alt+3' },
+        { id: 'messages', label: 'Mensajes', fullName: 'Mensajes', icon: MessageCircle, shortcut: 'Alt+4' },
+        { id: 'reviews', label: 'Reseñas', fullName: 'Reseñas Académicas', icon: Star, shortcut: 'Alt+5' },
+        { id: 'profile', label: 'Perfil', fullName: 'Mi Perfil', icon: User, shortcut: 'Alt+6' },
+      ];
+    }
+    return [
+      { id: 'dashboard', label: 'Panel', fullName: 'Panel Principal', icon: Activity, shortcut: 'Alt+1' },
+      { id: 'sessions', label: 'Tutorías', fullName: 'Mis Tutorías', icon: Calendar, shortcut: 'Alt+2' },
+      { id: 'messages', label: 'Mensajes', fullName: 'Mensajes', icon: MessageCircle, shortcut: 'Alt+3' },
+      { id: 'reviews', label: 'Reseñas', fullName: 'Reseñas', icon: Star, shortcut: 'Alt+4' },
+      { id: 'profile', label: 'Perfil', fullName: 'Mi Perfil', icon: User, shortcut: 'Alt+5' },
+    ];
+  };
+
+  const navigateToTab = (tabId) => {
+    setActiveTab(tabId);
+    try { sessionStorage.setItem('aura_active_tab', tabId); } catch (e) {}
+    if (tabId === 'messages' && !activeChatSession && currentUser) {
+      const userSessions = sessions.filter(s =>
+        (currentUser.role === 'tutor' ? s.tutorId === currentUser.id : s.studentId === currentUser.id) &&
+        (s.status === 'confirmed' || s.status === 'completed')
+      );
+      if (userSessions.length > 0) setActiveChatSession(userSessions[0]);
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (!currentUser) return;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+
+      if (e.altKey) {
+        if (e.key === 'm' || e.key === 'M') {
+          e.preventDefault();
+          setShowSidebar(prev => !prev);
+          return;
+        }
+
+        const currentModules = getNavigationModules();
+        const num = parseInt(e.key, 10);
+        if (!isNaN(num)) {
+          if (currentUser.role === 'admin' && num === 0) {
+            e.preventDefault();
+            navigateToTab('dashboard');
+            return;
+          }
+          const targetModule = currentModules[num - 1];
+          if (targetModule) {
+            e.preventDefault();
+            navigateToTab(targetModule.id);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentUser, sessions, activeChatSession]);
 
 
 
@@ -3550,6 +3654,17 @@ export default function App() {
 
             {currentUser && (
               <>
+                {/* BOTÓN SIDE VAR EN EL HEADER */}
+                <button
+                  type="button"
+                  onClick={() => setShowSidebar(true)}
+                  className="p-1.5 sm:p-2 text-white/95 hover:text-white hover:bg-white/20 active:scale-95 rounded-xl transition-all flex items-center justify-center border border-white/25 shadow-xs backdrop-blur-sm cursor-pointer"
+                  title="Abrir Side Var / Menú Lateral (Alt + M)"
+                  aria-label="Abrir Side Var"
+                >
+                  <Menu className="w-4.5 h-4.5 sm:w-5 sm:h-5 shrink-0" />
+                  <span className="text-xs font-bold hidden md:inline ml-1.5">Side Var</span>
+                </button>
                 {/* ROL EN LA BARRA SUPERIOR (ARRIBA) */}
                 <div className="flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 rounded-full bg-white/20 border border-white/30 text-white shadow-xs backdrop-blur-sm" title={`Tu rol activo: ${currentUser.role === 'admin' ? 'Super Administrador' : currentUser.role === 'tutor' ? 'Tutor Docente' : 'Estudiante Universitario'}`}>
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
@@ -3593,138 +3708,72 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
         {currentUser ? (
           <div>
-            <div className="bg-white dark:bg-slate-900 rounded-2xl p-2 sm:p-2.5 mb-6 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row gap-2 items-stretch md:items-center justify-between transition-colors">
-              <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto py-1 max-w-full scrollbar-none flex-nowrap sm:flex-wrap">
+            {/* BARRA DE NAVEGACIÓN DE MÓDULOS MOVIBLE (DRAGGABLE / SWIPEABLE) */}
+            <div className="bg-white dark:bg-slate-900 rounded-2xl p-2 sm:p-2.5 mb-2 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row gap-2 items-stretch md:items-center justify-between transition-colors">
+              <div className="flex items-center gap-1 sm:gap-1.5 min-w-0 flex-1">
+                {/* BOTÓN PARA ABRIR SIDE VAR */}
                 <button
                   type="button"
-                  onClick={() => setActiveTab('dashboard')}
-                  className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'dashboard' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-                  style={activeTab === 'dashboard' ? { backgroundColor: primaryColor } : {}}
-                  title="Panel Principal de AURA Estudiantil"
+                  onClick={() => setShowSidebar(true)}
+                  className="px-2.5 sm:px-3 py-2 rounded-xl text-xs sm:text-sm font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-blue-950/40 hover:text-blue-600 dark:hover:text-blue-400 active:scale-95 transition-all flex items-center gap-1.5 shrink-0 cursor-pointer border border-slate-200/80 dark:border-slate-700/60"
+                  title="Abrir menú lateral Side Var (Alt + M)"
                 >
-                  <Activity className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Panel</span>
+                  <Menu className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                  <span className="hidden sm:inline font-extrabold text-xs">Side Var</span>
                 </button>
 
-                {currentUser.role === 'admin' && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('admin_users')}
-                      className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'admin_users' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-                      style={activeTab === 'admin_users' ? { backgroundColor: primaryColor } : {}}
-                      title="RFADM01 - Gestión de Usuarios, Roles y Cuentas"
-                    >
-                      <Users className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Usuarios</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('admin_academic')}
-                      className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'admin_academic' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-                      style={activeTab === 'admin_academic' ? { backgroundColor: primaryColor } : {}}
-                      title="RFADM02 - Catálogo Académico, Carreras, Materias y Pensum"
-                    >
-                      <BookOpen className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Académico</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('admin_moderation')}
-                      className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'admin_moderation' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-                      style={activeTab === 'admin_moderation' ? { backgroundColor: primaryColor } : {}}
-                      title="RFADM03 - Moderación y Supervisión de Reseñas"
-                    >
-                      <MessageSquareOff className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Moderación</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('admin_stats')}
-                      className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'admin_stats' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-                      style={activeTab === 'admin_stats' ? { backgroundColor: primaryColor } : {}}
-                      title="RFADM04 - Estadísticas, Métricas y Filtros de Demanda"
-                    >
-                      <BarChart3 className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Estadísticas</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('admin_security')}
-                      className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'admin_security' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-                      style={activeTab === 'admin_security' ? { backgroundColor: primaryColor } : {}}
-                      title="RFADM05 - Supervisión de Seguridad y Bitácora Inmutable en PDF"
-                    >
-                      <ShieldCheck className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Seguridad</span>
-                    </button>
-                  </>
-                )}
+                {/* BOTÓN DESPLAZAR IZQUIERDA */}
+                <button
+                  type="button"
+                  onClick={() => scrollTabs(-180)}
+                  className="p-2 rounded-xl text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition shrink-0 cursor-pointer"
+                  title="Desplazar módulos a la izquierda"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
 
-                {currentUser.role === 'student' && (
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('find_tutors')}
-                    className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'find_tutors' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-                    style={activeTab === 'find_tutors' ? { backgroundColor: primaryColor } : {}}
-                    title="Explorar el catálogo de tutores disponibles para agendar citas"
-                  >
-                    <Search className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Tutores</span>
-                  </button>
-                )}
+                {/* CONTENEDOR DE PESTAÑAS MOVIBLE / DESLIZABLE POR ARRASTRE */}
+                <div
+                  ref={navTabsRef}
+                  onMouseDown={handleMouseDownTabs}
+                  onMouseLeave={handleMouseLeaveTabs}
+                  onMouseUp={handleMouseUpTabs}
+                  onMouseMove={handleMouseMoveTabs}
+                  className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto py-1 max-w-full no-scrollbar flex-nowrap scroll-smooth cursor-grab active:cursor-grabbing select-none"
+                  style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                >
+                  {getNavigationModules().map((mod) => {
+                    const Icon = mod.icon;
+                    const isActive = activeTab === mod.id;
+                    return (
+                      <button
+                        key={mod.id}
+                        type="button"
+                        onClick={() => navigateToTab(mod.id)}
+                        className={`px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${
+                          isActive
+                            ? 'text-white shadow-md'
+                            : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                        }`}
+                        style={isActive ? { backgroundColor: primaryColor } : {}}
+                        title={`${mod.fullName} (${mod.shortcut})`}
+                      >
+                        <Icon className="w-4 h-4 shrink-0" />
+                        <span className="whitespace-nowrap">{mod.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
 
-                {currentUser.role !== 'admin' && (
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('sessions')}
-                    className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'sessions' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-                    style={activeTab === 'sessions' ? { backgroundColor: primaryColor } : {}}
-                    title="Consultar mis citas, tutorías activas y solicitudes pendientes"
-                  >
-                    <Calendar className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Tutorías</span>
-                  </button>
-                )}
-
-                {currentUser.role !== 'admin' && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveTab('messages');
-                      if (!activeChatSession) {
-                        const userSessions = sessions.filter(s =>
-                          (currentUser.role === 'tutor' ? s.tutorId === currentUser.id : s.studentId === currentUser.id) &&
-                          (s.status === 'confirmed' || s.status === 'completed')
-                        );
-                        if (userSessions.length > 0) setActiveChatSession(userSessions[0]);
-                      }
-                    }}
-                    className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'messages' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-                    style={activeTab === 'messages' ? { backgroundColor: primaryColor } : {}}
-                    title="Abrir el centro de mensajería institucional en vivo"
-                  >
-                    <MessageCircle className="w-4 h-4 shrink-0" />
-                    <span className="whitespace-nowrap">Mensajes</span>
-                  </button>
-                )}
-
-                {currentUser.role !== 'admin' && (
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('reviews')}
-                    className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'reviews' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-                    style={activeTab === 'reviews' ? { backgroundColor: primaryColor } : {}}
-                    title="Ver valoraciones y reseñas académicas de tutores"
-                  >
-                    <Star className="w-4 h-4 shrink-0" />
-                    <span className="whitespace-nowrap">Reseñas</span>
-                  </button>
-                )}
-
-                {currentUser.role !== 'admin' && (
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('profile')}
-                    className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center space-x-1.5 shrink-0 cursor-pointer ${activeTab === 'profile' ? 'text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-                    style={activeTab === 'profile' ? { backgroundColor: primaryColor } : {}}
-                    title="Ver y editar mis datos de perfil de usuario"
-                  >
-                    <User className="w-4 h-4 shrink-0" /> <span className="whitespace-nowrap">Perfil</span>
-                  </button>
-                )}
+                {/* BOTÓN DESPLAZAR DERECHA */}
+                <button
+                  type="button"
+                  onClick={() => scrollTabs(180)}
+                  className="p-2 rounded-xl text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition shrink-0 cursor-pointer"
+                  title="Desplazar módulos a la derecha"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
               </div>
 
               {/* ROL EN LA BARRA DE NAVEGACIÓN PRINCIPAL */}
@@ -3736,6 +3785,69 @@ export default function App() {
                     {currentUser.role === 'admin' ? 'Super Admin' : currentUser.role === 'tutor' ? 'Tutor' : 'Estudiante'}
                   </span>
                 </div>
+              </div>
+            </div>
+
+            {/* BARRA DE ATAJOS RÁPIDOS DE NAVEGACIÓN ENTRE MÓDULOS */}
+            <div className="flex items-center justify-between gap-2 px-1 mb-5 text-xs">
+              <div className="flex items-center gap-1.5 overflow-x-auto py-0.5 no-scrollbar max-w-full">
+                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 shrink-0 flex items-center gap-1 mr-1">
+                  <Zap className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                  <span className="hidden sm:inline">Atajos Rápidos:</span>
+                </span>
+
+                {/* Botón Módulo Anterior */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const mods = getNavigationModules();
+                    const idx = mods.findIndex(m => m.id === activeTab);
+                    if (idx > 0) navigateToTab(mods[idx - 1].id);
+                    else if (idx === 0) navigateToTab(mods[mods.length - 1].id);
+                  }}
+                  className="px-2 py-1 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[11px] font-bold transition flex items-center gap-1 cursor-pointer border border-slate-200 dark:border-slate-700 shrink-0 shadow-2xs"
+                  title="Ir al módulo anterior"
+                >
+                  <ChevronLeft className="w-3 h-3" /> Ant.
+                </button>
+
+                {/* Botón Módulo Siguiente */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const mods = getNavigationModules();
+                    const idx = mods.findIndex(m => m.id === activeTab);
+                    if (idx >= 0 && idx < mods.length - 1) navigateToTab(mods[idx + 1].id);
+                    else if (idx === mods.length - 1) navigateToTab(mods[0].id);
+                  }}
+                  className="px-2 py-1 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[11px] font-bold transition flex items-center gap-1 cursor-pointer border border-slate-200 dark:border-slate-700 shrink-0 shadow-2xs"
+                  title="Ir al siguiente módulo"
+                >
+                  Sig. <ChevronRight className="w-3 h-3" />
+                </button>
+
+                {/* Píldoras de módulos con sus atajos directos */}
+                {getNavigationModules().map((mod) => (
+                  <button
+                    key={mod.id}
+                    type="button"
+                    onClick={() => navigateToTab(mod.id)}
+                    className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition cursor-pointer shrink-0 border ${
+                      activeTab === mod.id
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                        : 'bg-white dark:bg-slate-850 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                    title={`Saltar a ${mod.fullName} (${mod.shortcut})`}
+                  >
+                    <span className="opacity-70 mr-0.5">[{mod.shortcut.replace('Alt+', '')}]</span> {mod.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="hidden lg:flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-slate-500 shrink-0 font-medium">
+                <span>💡 Atajos:</span>
+                <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono text-[9px] text-slate-700 dark:text-slate-300 font-bold">Alt + M</kbd>
+                <span>Side Var</span>
               </div>
             </div>
 
@@ -7414,6 +7526,131 @@ export default function App() {
                 Enviar Calificación
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* SIDE VAR / BARRA LATERAL DESLIZABLE Y PLEGABLE */}
+      {showSidebar && currentUser && (
+        <div className="fixed inset-0 z-50 flex">
+          {/* Fondo oscuro traslúcido para cerrar al hacer clic */}
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
+            onClick={() => setShowSidebar(false)}
+            title="Hacer clic para cerrar Side Var"
+          />
+
+          {/* Panel lateral deslizante */}
+          <div className="relative w-72 sm:w-80 bg-white dark:bg-slate-900 h-full shadow-2xl flex flex-col border-r border-slate-200 dark:border-slate-800 z-10 animate-in slide-in-from-left duration-300">
+            {/* Cabecera del Side Var */}
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white font-black shadow-md shadow-blue-500/20">
+                  <Layers className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-sm text-slate-900 dark:text-white leading-tight">Side Var</h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Navegación de Módulos</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowSidebar(false)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-800 transition cursor-pointer"
+                title="Cerrar Side Var (Esc o Alt+M)"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Usuario Activo */}
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center overflow-hidden shrink-0 border border-slate-300 dark:border-slate-600">
+                  {currentUser.avatar ? (
+                    <img src={currentUser.avatar} alt={currentUser.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <User className="w-5 h-5 text-slate-600 dark:text-slate-300" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h4 className="font-bold text-xs text-slate-900 dark:text-white truncate">{currentUser.name}</h4>
+                  <span className="inline-block mt-0.5 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300">
+                    {currentUser.role === 'admin' ? 'Super Admin' : currentUser.role === 'tutor' ? 'Tutor' : 'Estudiante'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Lista de Módulos en Side Var */}
+            <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
+              <div className="px-2 py-1 text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                Módulos del Sistema
+              </div>
+              {getNavigationModules().map((mod) => {
+                const Icon = mod.icon;
+                const isActive = activeTab === mod.id;
+                return (
+                  <button
+                    key={mod.id}
+                    onClick={() => {
+                      navigateToTab(mod.id);
+                      setShowSidebar(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left cursor-pointer ${
+                      isActive
+                        ? 'text-white shadow-md'
+                        : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70'
+                    }`}
+                    style={isActive ? { backgroundColor: primaryColor } : {}}
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      <Icon className="w-4 h-4 shrink-0" />
+                      <span>{mod.fullName || mod.label}</span>
+                    </div>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-medium ${
+                      isActive ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500'
+                    }`}>
+                      {mod.shortcut}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Panel Inferior con Atajos y Modo Oscuro */}
+            <div className="p-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 space-y-2">
+              <button
+                onClick={toggleDarkMode}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition cursor-pointer"
+              >
+                <div className="flex items-center space-x-2">
+                  {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-600" />}
+                  <span>{isDarkMode ? 'Cambiar a Modo Claro' : 'Cambiar a Modo Oscuro'}</span>
+                </div>
+                <span className="text-[10px] text-slate-400">{isDarkMode ? 'Claro' : 'Oscuro'}</span>
+              </button>
+
+              <div className="p-2.5 rounded-xl bg-slate-100/70 dark:bg-slate-800/60 text-[11px] text-slate-500 dark:text-slate-400 space-y-1">
+                <div className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                  <Zap className="w-3 h-3 text-amber-500" /> Atajos Rápidos de Teclado:
+                </div>
+                <p className="text-[10px] leading-relaxed">
+                  • <kbd className="px-1 py-0.2 rounded bg-white dark:bg-slate-700 font-mono">Alt + M</kbd>: Abrir/cerrar Side Var<br />
+                  • <kbd className="px-1 py-0.2 rounded bg-white dark:bg-slate-700 font-mono">Alt + 0..5</kbd>: Navegar entre módulos
+                </p>
+              </div>
+
+              <button
+                onClick={() => {
+                  setShowSidebar(false);
+                  handleLogout();
+                }}
+                className="w-full flex items-center justify-center space-x-2 px-3 py-2 rounded-xl text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition cursor-pointer"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Cerrar Sesión</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
