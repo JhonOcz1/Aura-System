@@ -5,7 +5,7 @@ import {
   Check, Activity, Users, MessageSquareOff, BarChart3, ShieldCheck,
   Search, Calendar, Download, Filter, Star, PieChart, Camera,
   Palette, Clock, Trash2, ShieldAlert, MessageCircle, CheckCircle,
-  XCircle, KeyRound, UserPlus, Bell, X, Mail, Lock, ChevronDown, ChevronRight, Save, Edit3, FileText,
+  XCircle, KeyRound, UserPlus, Bell, X, Mail, Lock, ChevronDown, ChevronUp, ChevronRight, Save, Edit3, FileText,
   TrendingUp, CheckCircle2, Clock3, Upload, UserCheck, UserX, AlertTriangle, Layers, Plus, FileSpreadsheet, Video, MapPin, ExternalLink, Info, Send, RefreshCw, ArrowLeft, CheckCheck, Sun, Moon
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
@@ -3432,6 +3432,70 @@ export default function App() {
     };
   });
 
+  // JhonOcz - Desglose de estadísticas y métricas por materia bajo los filtros activos
+  const filteredSubjectStats = React.useMemo(() => {
+    const subjectMap = new Map();
+
+    filteredStatsSessions.forEach(session => {
+      const subjectName = (session.subject || 'Otras Materias').trim();
+      const key = subjectName.toLowerCase();
+      if (!subjectMap.has(key)) {
+        const catInfo = catalogSubjects.find(cs => cs.name?.toLowerCase() === key);
+        subjectMap.set(key, {
+          id: catInfo?.id || `sub_stat_${key}`,
+          name: subjectName,
+          career: session.career || catInfo?.career || 'General',
+          semester: catInfo?.semester || null,
+          total: 0,
+          completed: 0,
+          inWaiting: 0,
+          pending: 0,
+          confirmed: 0,
+          rejected: 0,
+          tutors: new Set()
+        });
+      }
+
+      const item = subjectMap.get(key);
+      item.total += 1;
+      if (session.status === 'completed') {
+        item.completed += 1;
+      } else if (session.status === 'confirmed') {
+        item.inWaiting += 1;
+        item.confirmed += 1;
+      } else if (session.status === 'pending') {
+        item.inWaiting += 1;
+        item.pending += 1;
+      } else if (session.status === 'rejected' || session.status === 'cancelled') {
+        item.rejected += 1;
+      }
+
+      const tutorObj = users.find(u => u.id === session.tutorId);
+      if (session.tutorName) {
+        item.tutors.add(session.tutorName);
+      } else if (tutorObj?.name) {
+        item.tutors.add(tutorObj.name);
+      }
+    });
+
+    return Array.from(subjectMap.values())
+      .map(item => {
+        const completedPct = item.total > 0 ? (item.completed / item.total) * 100 : 0;
+        const inWaitingPct = item.total > 0 ? (item.inWaiting / item.total) * 100 : 0;
+        const rejectedPct = item.total > 0 ? (item.rejected / item.total) * 100 : 0;
+        const shareOfTotal = statsTotalCount > 0 ? (item.total / statsTotalCount) * 100 : 0;
+        return {
+          ...item,
+          tutorList: Array.from(item.tutors),
+          completedPct,
+          inWaitingPct,
+          rejectedPct,
+          shareOfTotal
+        };
+      })
+      .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+  }, [filteredStatsSessions, catalogSubjects, users, statsTotalCount]);
+
   return (
     <div className={`min-h-screen font-sans flex flex-col text-sm sm:text-base transition-colors duration-300 ${isDarkMode ? 'dark bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-800'}`}>
       {toast && (
@@ -5320,45 +5384,17 @@ export default function App() {
                     )}
                   </div>
 
-                  {/* Botones de Selección Rápida (Presets de Años y Períodos) */}
+                  {/* Botones de Selección Rápida */}
                   <div className="space-y-2">
-                    <span className="text-[11px] font-black uppercase text-slate-400 tracking-wider">Períodos y Años Rápidos:</span>
+                    <span className="text-[11px] font-black uppercase text-slate-400 tracking-wider">Acceso Rápido:</span>
                     <div className="flex items-center gap-2 overflow-x-auto pb-1 flex-wrap text-xs font-bold">
                       <button
                         type="button"
                         onClick={() => { setStatsFilterStartDate(''); setStatsFilterEndDate(''); }}
-                        className={`px-3.5 py-1.5 rounded-xl border transition cursor-pointer active:scale-95 ${!statsFilterStartDate && !statsFilterEndDate ? 'bg-blue-600 text-white border-blue-600 shadow-xs' : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+                        className={`px-3.5 py-1.5 rounded-xl border transition cursor-pointer active:scale-95 ${!statsFilterStartDate && !statsFilterEndDate ? 'bg-blue-600 text-white border-blue-600 shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
                         title="Ver todo el historial general registrado"
                       >
                         Histórico Completo
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setStatsFilterStartDate('2026-01-01'); setStatsFilterEndDate('2026-12-31'); }}
-                        className={`px-3.5 py-1.5 rounded-xl border transition cursor-pointer active:scale-95 ${statsFilterStartDate === '2026-01-01' && statsFilterEndDate === '2026-12-31' ? 'bg-blue-600 text-white border-blue-600 shadow-xs' : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
-                        title="Filtrar todas las tutorías correspondientes al año 2026"
-                      >
-                        Año 2026
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setStatsFilterStartDate('2027-01-01'); setStatsFilterEndDate('2027-12-31'); }}
-                        className={`px-3.5 py-1.5 rounded-xl border transition cursor-pointer active:scale-95 ${statsFilterStartDate === '2027-01-01' && statsFilterEndDate === '2027-12-31' ? 'bg-blue-600 text-white border-blue-600 shadow-xs' : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
-                        title="Filtrar todas las tutorías correspondientes al año 2027"
-                      >
-                        Año 2027
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const year = new Date().getFullYear();
-                          setStatsFilterStartDate(`${year}-08-01`);
-                          setStatsFilterEndDate(`${year}-10-31`);
-                        }}
-                        className={`px-3.5 py-1.5 rounded-xl border transition cursor-pointer active:scale-95 ${statsFilterStartDate?.endsWith('-08-01') && statsFilterEndDate?.endsWith('-10-31') ? 'bg-blue-600 text-white border-blue-600 shadow-xs' : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
-                        title="Filtrar tutorías del período académico de Agosto a Octubre"
-                      >
-                        Agosto - Octubre
                       </button>
                       <button
                         type="button"
@@ -5368,7 +5404,7 @@ export default function App() {
                           setStatsFilterStartDate(past30.toISOString().split('T')[0]);
                           setStatsFilterEndDate(now.toISOString().split('T')[0]);
                         }}
-                        className="px-3.5 py-1.5 rounded-xl border bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition cursor-pointer active:scale-95"
+                        className={`px-3.5 py-1.5 rounded-xl border transition cursor-pointer active:scale-95 ${statsFilterStartDate && statsFilterEndDate ? 'bg-blue-600 text-white border-blue-600 shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
                         title="Filtrar tutorías de los últimos 30 días calendario"
                       >
                         Últimos 30 días
@@ -5586,88 +5622,182 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Sección: Desglose y Métricas por Carrera */}
+                  {/* Sección: Desglose y Métricas Dinámicas (Por Materia con filtro activo / Por Carrera por defecto) */}
                   <div className="space-y-4 pt-2">
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                       <div>
-                        <h4 className="font-extrabold text-base sm:text-lg text-slate-800 dark:text-white">
-                          Distribución y Métricas por Carrera
+                        <h4 className="font-extrabold text-base sm:text-lg text-slate-800 dark:text-white flex items-center space-x-2">
+                          <span>{hasActiveStatsFilters ? 'Distribución y Métricas Detalladas por Materia' : 'Distribución y Métricas por Carrera'}</span>
+                          {hasActiveStatsFilters && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-blue-100 dark:bg-blue-950/70 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                              Filtro Activo
+                            </span>
+                          )}
                         </h4>
                         <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                          Detalle analítico de demanda y efectividad según las materias y clases activas de cada carrera bajo el filtro activo.
+                          {hasActiveStatsFilters
+                            ? 'Estadísticas analíticas detalladas de demanda, efectividad y tutores para cada materia bajo los filtros aplicados.'
+                            : 'Métricas generales de demanda y rendimiento académico agrupadas por carrera universitaria en el sistema.'}
                         </p>
                       </div>
-                      <span className="text-xs text-slate-500 dark:text-slate-400 font-bold bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700">
-                        {filteredCareerStats.length} carreras evaluadas
+                      <span className="text-xs text-slate-500 dark:text-slate-400 font-bold bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0">
+                        {hasActiveStatsFilters ? `${filteredSubjectStats.length} materias con tutorías` : `${filteredCareerStats.length} carreras evaluadas`}
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {filteredCareerStats.map((c) => (
-                        <div key={c.id} className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700 transition-all shadow-xs space-y-3.5 flex flex-col justify-between">
-                          <div className="space-y-3">
-                            {/* Cabecera de Carrera */}
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center space-x-2.5 min-w-0">
-                                <span className="font-black px-2.5 py-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs tracking-wider" style={{ color: primaryColor }}>
-                                  {c.code || 'CAR'}
-                                </span>
-                                <span className="font-extrabold text-slate-900 dark:text-white text-sm sm:text-base truncate">
-                                  {c.name}
-                                </span>
-                              </div>
-                              <span className={`px-3 py-1 rounded-full text-xs font-black shrink-0 ${c.total > 0 ? 'bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
-                                {c.total} {c.total === 1 ? 'tutoría' : 'tutorías'}
-                              </span>
-                            </div>
+                    {/* VISTA CONDICIONAL: SI HAY FILTROS ACTIVOS -> POR MATERIA; SI SE RESTABLECEN -> VISTA POR DEFECTO */}
+                    {hasActiveStatsFilters ? (
+                      filteredSubjectStats.length > 0 ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {filteredSubjectStats.map((sub) => (
+                            <div key={sub.id} className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700 transition-all shadow-xs space-y-3.5 flex flex-col justify-between">
+                              <div className="space-y-3">
+                                {/* Cabecera de Materia */}
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center space-x-2 min-w-0">
+                                    <span className="font-black px-2.5 py-1 bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 rounded-lg text-xs tracking-wider text-blue-700 dark:text-blue-300 shrink-0">
+                                      {sub.semester ? `Sem. ${sub.semester}` : 'Materia'}
+                                    </span>
+                                    <span className="font-extrabold text-slate-900 dark:text-white text-sm sm:text-base truncate" title={sub.name}>
+                                      {sub.name}
+                                    </span>
+                                  </div>
+                                  <span className={`px-3 py-1 rounded-full text-xs font-black shrink-0 ${sub.total > 0 ? 'bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
+                                    {sub.total} {sub.total === 1 ? 'tutoría' : 'tutorías'}
+                                  </span>
+                                </div>
 
-                            {/* Frase Descriptiva Dinámica */}
-                            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
-                              {c.total > 0 ? (
-                                <span>
-                                  En <strong className="text-slate-900 dark:text-white">{c.name}</strong> hay <strong className="text-slate-900 dark:text-white">{c.total}</strong> {c.total === 1 ? 'tutoría registrada' : 'tutorías registradas'}, de las cuales <strong className="text-emerald-700 dark:text-emerald-400">{c.completed}</strong> se {c.completed === 1 ? 'realizó' : 'realizaron'} con éxito, <strong className="text-amber-700 dark:text-amber-400">{c.inWaiting}</strong> {c.inWaiting === 1 ? 'está' : 'están'} en período de espera para realizarse y <strong className="text-rose-700 dark:text-rose-400">{c.rejected}</strong> no se {c.rejected === 1 ? 'completó' : 'completaron'}.
-                                </span>
-                              ) : (
-                                <span className="text-slate-500 dark:text-slate-400 italic">
-                                  En <strong className="text-slate-700 dark:text-slate-300">{c.name}</strong> no se registran solicitudes de tutorías en el rango o filtro seleccionado.
-                                </span>
-                              )}
-                            </div>
+                                <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                                  Carrera: <strong className="text-slate-800 dark:text-slate-200">{sub.career}</strong>
+                                </div>
 
-                            {/* Mini Barra de Distribución Proporcional */}
-                            <div className="space-y-1">
-                              <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex">
-                                {c.total > 0 ? (
-                                  <>
-                                    <div style={{ width: `${c.completedPct}%` }} className="bg-emerald-500 h-full" title={`Exitosas: ${c.completed} (${c.completedPct.toFixed(0)}%)`} />
-                                    <div style={{ width: `${c.inWaitingPct}%` }} className="bg-amber-400 h-full" title={`En espera: ${c.inWaiting} (${c.inWaitingPct.toFixed(0)}%)`} />
-                                    <div style={{ width: `${c.rejectedPct}%` }} className="bg-rose-500 h-full" title={`No completadas: ${c.rejected} (${c.rejectedPct.toFixed(0)}%)`} />
-                                  </>
-                                ) : (
-                                  <div className="w-full bg-slate-200 dark:bg-slate-700 h-full" />
+                                {/* Frase Descriptiva Dinámica de Materia */}
+                                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
+                                  <span>
+                                    En <strong className="text-slate-900 dark:text-white">{sub.name}</strong> se {sub.total === 1 ? 'registra' : 'registran'} <strong className="text-slate-900 dark:text-white">{sub.total}</strong> {sub.total === 1 ? 'tutoría' : 'tutorías'} en este filtro: <strong className="text-emerald-700 dark:text-emerald-400">{sub.completed}</strong> {sub.completed === 1 ? 'impartida con éxito' : 'impartidas con éxito'} ({sub.completedPct.toFixed(1)}%), <strong className="text-amber-700 dark:text-amber-400">{sub.inWaiting}</strong> en espera y <strong className="text-rose-700 dark:text-rose-400">{sub.rejected}</strong> no {sub.rejected === 1 ? 'completada' : 'completadas'}.
+                                  </span>
+                                </div>
+
+                                {/* Mini Barra Proporcional */}
+                                <div className="space-y-1">
+                                  <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex">
+                                    {sub.total > 0 ? (
+                                      <>
+                                        <div style={{ width: `${sub.completedPct}%` }} className="bg-emerald-500 h-full" title={`Exitosas: ${sub.completed} (${sub.completedPct.toFixed(0)}%)`} />
+                                        <div style={{ width: `${sub.inWaitingPct}%` }} className="bg-amber-400 h-full" title={`En espera: ${sub.inWaiting} (${sub.inWaitingPct.toFixed(0)}%)`} />
+                                        <div style={{ width: `${sub.rejectedPct}%` }} className="bg-rose-500 h-full" title={`No completadas: ${sub.rejected} (${sub.rejectedPct.toFixed(0)}%)`} />
+                                      </>
+                                    ) : (
+                                      <div className="w-full bg-slate-200 dark:bg-slate-700 h-full" />
+                                    )}
+                                  </div>
+                                </div>
+
+                                {sub.tutorList.length > 0 && (
+                                  <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                                    Tutores involucrados: <strong className="text-slate-700 dark:text-slate-300">{sub.tutorList.join(', ')}</strong>
+                                  </div>
                                 )}
                               </div>
-                            </div>
-                          </div>
 
-                          {/* 3 Badges de Estados Detallados */}
-                          <div className="grid grid-cols-3 gap-2 pt-1 text-center">
-                            <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-800/60">
-                              <span className="block text-[10px] font-black uppercase text-emerald-800 dark:text-emerald-400">Exitosas</span>
-                              <span className="text-sm font-black text-emerald-700 dark:text-emerald-300">{c.completed}</span>
+                              {/* 3 Badges de Estados */}
+                              <div className="grid grid-cols-3 gap-2 pt-1 text-center">
+                                <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-800/60">
+                                  <span className="block text-[10px] font-black uppercase text-emerald-800 dark:text-emerald-400">Exitosas</span>
+                                  <span className="text-sm font-black text-emerald-700 dark:text-emerald-300">{sub.completed}</span>
+                                </div>
+                                <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-800/60">
+                                  <span className="block text-[10px] font-black uppercase text-amber-800 dark:text-amber-400">En Espera</span>
+                                  <span className="text-sm font-black text-amber-700 dark:text-amber-300">{sub.inWaiting}</span>
+                                </div>
+                                <div className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-800/60">
+                                  <span className="block text-[10px] font-black uppercase text-rose-800 dark:text-rose-400">No Realizadas</span>
+                                  <span className="text-sm font-black text-rose-700 dark:text-rose-300">{sub.rejected}</span>
+                                </div>
+                              </div>
                             </div>
-                            <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-800/60">
-                              <span className="block text-[10px] font-black uppercase text-amber-800 dark:text-amber-400">En Espera</span>
-                              <span className="text-sm font-black text-amber-700 dark:text-amber-300">{c.inWaiting}</span>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="p-8 text-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl text-slate-500 dark:text-slate-400 space-y-2">
+                          <p className="font-bold text-sm">No hay registros de materias para los filtros seleccionados</p>
+                          <button
+                            type="button"
+                            onClick={resetStatsFilters}
+                            className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                          >
+                            Restablecer a la vista principal
+                          </button>
+                        </div>
+                      )
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {filteredCareerStats.map((c) => (
+                          <div key={c.id} className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700 transition-all shadow-xs space-y-3.5 flex flex-col justify-between">
+                            <div className="space-y-3">
+                              {/* Cabecera de Carrera */}
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-2.5 min-w-0">
+                                  <span className="font-black px-2.5 py-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs tracking-wider" style={{ color: primaryColor }}>
+                                    {c.code || 'CAR'}
+                                  </span>
+                                  <span className="font-extrabold text-slate-900 dark:text-white text-sm sm:text-base truncate">
+                                    {c.name}
+                                  </span>
+                                </div>
+                                <span className={`px-3 py-1 rounded-full text-xs font-black shrink-0 ${c.total > 0 ? 'bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
+                                  {c.total} {c.total === 1 ? 'tutoría' : 'tutorías'}
+                                </span>
+                              </div>
+
+                              {/* Frase Descriptiva Dinámica */}
+                              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
+                                {c.total > 0 ? (
+                                  <span>
+                                    En <strong className="text-slate-900 dark:text-white">{c.name}</strong> hay <strong className="text-slate-900 dark:text-white">{c.total}</strong> {c.total === 1 ? 'tutoría registrada' : 'tutorías registradas'}, de las cuales <strong className="text-emerald-700 dark:text-emerald-400">{c.completed}</strong> se {c.completed === 1 ? 'realizó' : 'realizaron'} con éxito, <strong className="text-amber-700 dark:text-amber-400">{c.inWaiting}</strong> {c.inWaiting === 1 ? 'está' : 'están'} en período de espera para realizarse y <strong className="text-rose-700 dark:text-rose-400">{c.rejected}</strong> no se {c.rejected === 1 ? 'completó' : 'completaron'}.
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-500 dark:text-slate-400 italic">
+                                    En <strong className="text-slate-700 dark:text-slate-300">{c.name}</strong> no se registran solicitudes de tutorías en el rango o filtro seleccionado.
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Mini Barra de Distribución Proporcional */}
+                              <div className="space-y-1">
+                                <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex">
+                                  {c.total > 0 ? (
+                                    <>
+                                      <div style={{ width: `${c.completedPct}%` }} className="bg-emerald-500 h-full" title={`Exitosas: ${c.completed} (${c.completedPct.toFixed(0)}%)`} />
+                                      <div style={{ width: `${c.inWaitingPct}%` }} className="bg-amber-400 h-full" title={`En espera: ${c.inWaiting} (${c.inWaitingPct.toFixed(0)}%)`} />
+                                      <div style={{ width: `${c.rejectedPct}%` }} className="bg-rose-500 h-full" title={`No completadas: ${c.rejected} (${c.rejectedPct.toFixed(0)}%)`} />
+                                    </>
+                                  ) : (
+                                    <div className="w-full bg-slate-200 dark:bg-slate-700 h-full" />
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                            <div className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-800/60">
-                              <span className="block text-[10px] font-black uppercase text-rose-800 dark:text-rose-400">No Realizadas</span>
-                              <span className="text-sm font-black text-rose-700 dark:text-rose-300">{c.rejected}</span>
+
+                            {/* 3 Badges de Estados Detallados */}
+                            <div className="grid grid-cols-3 gap-2 pt-1 text-center">
+                              <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-800/60">
+                                <span className="block text-[10px] font-black uppercase text-emerald-800 dark:text-emerald-400">Exitosas</span>
+                                <span className="text-sm font-black text-emerald-700 dark:text-emerald-300">{c.completed}</span>
+                              </div>
+                              <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-800/60">
+                                <span className="block text-[10px] font-black uppercase text-amber-800 dark:text-amber-400">En Espera</span>
+                                <span className="text-sm font-black text-amber-700 dark:text-amber-300">{c.inWaiting}</span>
+                              </div>
+                              <div className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-800/60">
+                                <span className="block text-[10px] font-black uppercase text-rose-800 dark:text-rose-400">No Realizadas</span>
+                                <span className="text-sm font-black text-rose-700 dark:text-rose-300">{c.rejected}</span>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -7121,16 +7251,6 @@ export default function App() {
             </div>
 
             <div className="flex items-center space-x-3 text-xs">
-              <button
-                type="button"
-                onClick={toggleDarkMode}
-                className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center space-x-1.5 cursor-pointer active:scale-95"
-                title={isDarkMode ? "Cambiar a Modo Claro (Luz)" : "Cambiar a Modo Oscuro"}
-              >
-                {isDarkMode ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-slate-500" />}
-                <span className="text-[11px] font-semibold">{isDarkMode ? 'Modo Claro' : 'Modo Oscuro'}</span>
-              </button>
-              <span className="text-slate-300 dark:text-slate-700">|</span>
               <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
                 Instituto Universitario Jesús Obrero • Caracas / Catia, Venezuela
               </span>
@@ -7155,6 +7275,28 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      {/* BOTÓN FLOTANTE DE ACCESIBILIDAD (SUBIR AL INICIO / BAJAR AL FINAL) */}
+      <div className="fixed bottom-5 right-5 z-40 flex flex-col items-center space-y-2">
+        <button
+          type="button"
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 shadow-xl border border-slate-200 dark:border-slate-700 flex items-center justify-center hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white transition-all active:scale-90 cursor-pointer"
+          title="Accesibilidad: Ir al inicio de la página (Arriba)"
+          aria-label="Ir al inicio de la página"
+        >
+          <ChevronUp className="w-5 h-5 sm:w-6 sm:h-6" />
+        </button>
+        <button
+          type="button"
+          onClick={() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' })}
+          className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 shadow-xl border border-slate-200 dark:border-slate-700 flex items-center justify-center hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white transition-all active:scale-90 cursor-pointer"
+          title="Accesibilidad: Ir al final de la página (Abajo)"
+          aria-label="Ir al final de la página"
+        >
+          <ChevronDown className="w-5 h-5 sm:w-6 sm:h-6" />
+        </button>
+      </div>
 
       {/* MODAL DETALLE DE TUTOR Y COMENTARIOS */}
       {viewingTutorProfile && (() => {
