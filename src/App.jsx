@@ -7252,27 +7252,17 @@ export default function App() {
             </div>
           </div>
 
-          {/* Fila Clásica de Derechos y Autores */}
+          {/* Fila Clásica de Derechos y Creadores */}
           <div className="flex flex-col md:flex-row items-center justify-between gap-2.5 text-center md:text-left text-[11px] text-slate-500 dark:text-slate-400">
             <div>
               <p>&copy; {new Date().getFullYear()} <strong className="text-slate-700 dark:text-slate-300 font-bold">AURA Estudiantil</strong>. Todos los derechos reservados.</p>
             </div>
             <div className="flex flex-wrap justify-center md:justify-end items-center gap-x-2 gap-y-1">
-              <span className="font-bold text-slate-700 dark:text-slate-300">Autores:</span>
+              <span className="font-bold text-slate-700 dark:text-slate-300">Creadores:</span>
               <span>Angie Gutiérrez (C.I: 29.992.946)</span>
               <span className="text-slate-300 dark:text-slate-700">•</span>
-              <span>Daniel Guerrero (C.I: 32.235.704)</span>
-              <span className="text-slate-300 dark:text-slate-700">•</span>
-              <span>Jendrix Hernández (C.I: 32.652.588)</span>
-              <span className="text-slate-300 dark:text-slate-700">•</span>
-              <span>Gabriel Mendoza (C.I: 29.675.720)</span>
+              <span>Jhonny Ocariz (C.I: 31.170.619)</span>
             </div>
-          </div>
-
-          <div className="flex justify-end text-right pt-0.5">
-            <span className="text-[3px] text-slate-400 dark:text-slate-500 font-medium tracking-wide">
-              Jhonny ocariz 31.170.619
-            </span>
           </div>
         </div>
       </footer>

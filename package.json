@@ -1,9 +1,9 @@
 {
-  "name": "aura-estudiantil",
+  "name": "aura-system",
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "homepage": "https://ansus2153.github.io/aura-estudiantil",
+  "homepage": "https://jhonocz1.github.io/Aura-System",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
