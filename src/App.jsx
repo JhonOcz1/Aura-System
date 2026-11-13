@@ -822,6 +822,10 @@ export default function App() {
   const [profileNewPass, setProfileNewPass] = useState('');
   const [profileConfirmPass, setProfileConfirmPass] = useState('');
   const [showProfileNewPass, setShowProfileNewPass] = useState(false);
+  // Estados para Auditoría y Supervisión de Seguridad (RFADM05)
+  const [adminSecuritySubTab, setAdminSecuritySubTab] = useState('tutor_history');
+  const [adminSessionsFilterStatus, setAdminSessionsFilterStatus] = useState('all');
+  const [adminSessionsSearchQuery, setAdminSessionsSearchQuery] = useState('');
 
   // Estados y lógica para barra de navegación movible (arrastrable) y Side Var (Barra lateral)
   const [showSidebar, setShowSidebar] = useState(false);
@@ -3304,6 +3308,141 @@ export default function App() {
     }
   };
 
+  // Función para exportar historial completo de tutorías en formato PDF (RFADM05)
+  const exportSessionsAuditToPDF = (sessionsList, generatedBy = 'Admin Global', brandColor = '#2563eb') => {
+    if (!sessionsList || sessionsList.length === 0) {
+      showToast('No hay registros de tutorías para exportar', 'danger');
+      return;
+    }
+
+    try {
+      const doc = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+
+      // Franja superior institucional
+      doc.setFillColor(15, 23, 42); // slate-900
+      doc.rect(0, 0, pageWidth, 28, 'F');
+
+      const hex = (brandColor || '#2563eb').replace('#', '');
+      const num = parseInt(hex, 16);
+      const r = (num >> 16) & 255;
+      const g = (num >> 8) & 255;
+      const b = num & 255;
+      doc.setFillColor(r, g, b);
+      doc.rect(0, 28, pageWidth, 2.5, 'F');
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(15);
+      doc.text('AURA ESTUDIANTIL — IUJO', 14, 11);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(203, 213, 225);
+      doc.text('Instituto Universitario Jesús Obrero | Supervisión y Auditoría Académica', 14, 17);
+      doc.text('Historial Oficial y Registro Integral de Tutorías del Sistema', 14, 22);
+
+      // Metadatos
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(226, 232, 240);
+      doc.roundedRect(14, 34, pageWidth - 28, 18, 2, 2, 'FD');
+
+      doc.setFontSize(8);
+      doc.setTextColor(71, 85, 105);
+      doc.setFont('helvetica', 'bold');
+      doc.text('FECHA DE EMISIÓN (HORA VENEZUELA):', 18, 40);
+      doc.text('GENERADO POR:', 18, 45.5);
+      doc.text('TOTAL DE TUTORÍAS REGISTRADAS:', 130, 40);
+      doc.text('ESTADO DEL FILTRO:', 130, 45.5);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(15, 23, 42);
+      const emissionDate = getVenezuelaTimestamp();
+      doc.text(emissionDate, 82, 40);
+      doc.text(generatedBy, 82, 45.5);
+      doc.text(`${sessionsList.length} tutoría(s)`, 185, 40);
+      const filterLabel = adminSessionsFilterStatus === 'all'
+        ? 'Todas'
+        : adminSessionsFilterStatus === 'confirmed'
+        ? 'Aceptadas / En Proceso'
+        : adminSessionsFilterStatus === 'pending'
+        ? 'En Espera / Pendientes'
+        : adminSessionsFilterStatus === 'completed'
+        ? 'Completadas'
+        : 'Rechazadas / Canceladas';
+      doc.text(filterLabel, 185, 45.5);
+
+      // Tabla
+      const tableHead = [['#', 'Materia / Asignatura', 'Estudiante', 'Tutor Asignado', 'Carrera', 'Fecha y Hora', 'Modalidad', 'Estado']];
+      const tableBody = sessionsList.map((s, idx) => {
+        const catalogMatch = catalogSubjects.find(cs => cs.name?.toLowerCase() === s.subject?.toLowerCase());
+        const careerName = catalogMatch?.career || getSessionCareer(s);
+        let statusLabel = 'En Espera';
+        if (s.status === 'confirmed') statusLabel = 'Aceptada / En Proceso';
+        else if (s.status === 'completed') statusLabel = 'Completada';
+        else if (s.status === 'rejected') statusLabel = 'Rechazada / Cancelada';
+
+        return [
+          (idx + 1).toString(),
+          s.subject || 'Sin asignar',
+          s.studentName || 'Cupo Abierto',
+          s.tutorName || 'Sin asignar',
+          careerName || 'General',
+          `${s.date || 'Por acordar'} ${s.time ? `- ${s.time}` : ''}`,
+          s.modality || 'Presencial',
+          statusLabel
+        ];
+      });
+
+      autoTable(doc, {
+        head: tableHead,
+        body: tableBody,
+        startY: 56,
+        theme: 'grid',
+        headStyles: {
+          fillColor: [15, 23, 42],
+          textColor: [255, 255, 255],
+          fontSize: 8,
+          fontStyle: 'bold',
+          halign: 'left'
+        },
+        styles: {
+          fontSize: 7.5,
+          cellPadding: 2.5,
+          textColor: [30, 41, 59]
+        },
+        columnStyles: {
+          0: { cellWidth: 10, halign: 'center' },
+          7: { fontStyle: 'bold' }
+        },
+        margin: { left: 14, right: 14 }
+      });
+
+      const totalPages = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setFontSize(7.5);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(148, 163, 184);
+        doc.text('Instituto Universitario Jesús Obrero (IUJO) • Auditoría de Tutorías', 14, pageHeight - 8);
+        doc.text(`Página ${i} de ${totalPages}`, pageWidth - 14, pageHeight - 8, { align: 'right' });
+      }
+
+      const fileDate = getVenezuelaDateString();
+      doc.save(`auditoria_tutorias_iujo_${fileDate}.pdf`);
+      showToast('Historial de tutorías descargado en PDF exitosamente', 'success');
+    } catch (err) {
+      console.error('Error generando PDF de tutorías:', err);
+      showToast('Error al generar el archivo PDF de tutorías', 'danger');
+    }
+  };
+
   // PALETA DINÁMICA DE COLOR DE TODA LA PÁGINA
   const primaryColor = currentUser?.primaryColor || '#2563eb';
   const todayDateFormatted = getVenezuelaDateString();
@@ -3385,6 +3524,34 @@ export default function App() {
   const completedPctGeneral = totalSessionsCount > 0 ? (completedSessionsCount / totalSessionsCount) * 100 : 0;
   const inWaitingPctGeneral = totalSessionsCount > 0 ? (inWaitingSessionsCount / totalSessionsCount) * 100 : 0;
   const rejectedPctGeneral = totalSessionsCount > 0 ? (rejectedSessionsCount / totalSessionsCount) * 100 : 0;
+
+  // Filtrado y estadísticas para el Historial de Tutorías en Auditoría (RFADM05)
+  const filteredAdminSessions = (sessions || []).filter(s => {
+    if (adminSessionsFilterStatus !== 'all' && s.status !== adminSessionsFilterStatus) {
+      return false;
+    }
+    if (adminSessionsSearchQuery.trim()) {
+      const q = adminSessionsSearchQuery.toLowerCase().trim();
+      const subject = (s.subject || '').toLowerCase();
+      const student = (s.studentName || '').toLowerCase();
+      const tutor = (s.tutorName || '').toLowerCase();
+      const date = (s.date || '').toLowerCase();
+      const time = (s.time || '').toLowerCase();
+      const modality = (s.modality || '').toLowerCase();
+      const location = (s.location || '').toLowerCase();
+      const catalogMatch = catalogSubjects.find(cs => cs.name?.toLowerCase() === s.subject?.toLowerCase());
+      const career = (catalogMatch?.career || getSessionCareer(s) || '').toLowerCase();
+
+      return subject.includes(q) || student.includes(q) || tutor.includes(q) || date.includes(q) || time.includes(q) || modality.includes(q) || location.includes(q) || career.includes(q);
+    }
+    return true;
+  });
+
+  const totalAdminSessionsCount = (sessions || []).length;
+  const confirmedAdminSessionsCount = (sessions || []).filter(s => s.status === 'confirmed').length;
+  const pendingAdminSessionsCount = (sessions || []).filter(s => s.status === 'pending').length;
+  const completedAdminSessionsCount = (sessions || []).filter(s => s.status === 'completed').length;
+  const rejectedAdminSessionsCount = (sessions || []).filter(s => s.status === 'rejected').length;
 
   // Métricas desglosadas estricta y únicamente por las carreras oficiales registradas
   const careerStats = (careers || []).map(career => {
@@ -5808,54 +5975,427 @@ export default function App() {
 
             {activeTab === 'admin_security' && currentUser.role === 'admin' && (
               <div className="space-y-6">
-                <div className="bg-white rounded-3xl border p-6 space-y-4 shadow-sm">
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b pb-3 gap-3">
+                {/* ENCABEZADO Y SELECTOR DE SUB-SECCIÓN DE AUDITORÍA */}
+                <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-sm space-y-4">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-100 dark:border-slate-800 pb-4 gap-3">
                     <div>
-                      <h2 className="text-xl font-black text-slate-800 flex items-center space-x-2.5">
-                        <ShieldCheck className="w-5 h-5" style={{ color: primaryColor }} />
-                        <span>RFADM05 - Supervisión de Seguridad y Auditoría en Vivo</span>
+                      <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white flex items-center space-x-2.5">
+                        <ShieldCheck className="w-6 h-6 shrink-0" style={{ color: primaryColor }} />
+                        <span>RFADM05 - Módulo de Auditoría y Supervisión Global</span>
                       </h2>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        Control de seguridad, trazabilidad de eventos del sistema e historial integral de todas las tutorías académicas.
+                      </p>
                     </div>
-                    <div className="flex items-center space-x-2">
+
+                    {/* SELECTOR DE SUB-SECCIONES */}
+                    <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 self-stretch sm:self-auto">
                       <button
-                        onClick={() => exportAuditsToPDF(filteredAudits, currentUser?.name || 'Admin Global', primaryColor)}
-                        className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-sm rounded-xl flex items-center space-x-2 shadow-sm transition"
-                        title="Descargar bitácora de auditoría en formato PDF"
+                        type="button"
+                        onClick={() => setAdminSecuritySubTab('tutor_history')}
+                        className={`flex-1 sm:flex-none px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-2 cursor-pointer ${
+                          adminSecuritySubTab === 'tutor_history'
+                            ? 'bg-blue-600 text-white shadow-sm'
+                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                        }`}
                       >
-                        <FileText className="w-4.5 h-4.5" />
-                        <span>Descargar en PDF</span>
+                        <Calendar className="w-4 h-4 shrink-0" />
+                        <span>Historial de Tutorías ({totalAdminSessionsCount})</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setAdminSecuritySubTab('audit_logs')}
+                        className={`flex-1 sm:flex-none px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-2 cursor-pointer ${
+                          adminSecuritySubTab === 'audit_logs'
+                            ? 'bg-blue-600 text-white shadow-sm'
+                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        <ShieldCheck className="w-4 h-4 shrink-0" />
+                        <span>Bitácora de Seguridad ({filteredAudits.length})</span>
                       </button>
                     </div>
                   </div>
 
-                  <div className="flex items-center space-x-2.5 bg-slate-50 p-3.5 rounded-2xl border">
-                    <Filter className="w-4.5 h-4.5 text-slate-500 shrink-0" />
-                    <input type="text" placeholder="Filtrar por fecha, hora, usuario o acción..." value={auditFilterQuery} onChange={(e) => setAuditFilterQuery(e.target.value)} className="w-full bg-transparent text-sm font-medium focus:outline-none text-slate-800" />
-                    {auditFilterQuery && <button onClick={() => setAuditFilterQuery('')} className="text-sm text-slate-500 hover:text-slate-800">Limpiar</button>}
-                  </div>
+                  {/* VISTA 1: HISTORIAL DE TODAS LAS TUTORÍAS (ACEPTADAS, EN ESPERA, RECHAZADAS, COMPLETADAS) */}
+                  {adminSecuritySubTab === 'tutor_history' && (
+                    <div className="space-y-6 pt-1">
+                      {/* TARJETAS RESUMEN KPI DE TUTORÍAS */}
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                        <div
+                          onClick={() => setAdminSessionsFilterStatus('all')}
+                          className={`p-3.5 rounded-2xl border transition cursor-pointer ${
+                            adminSessionsFilterStatus === 'all'
+                              ? 'bg-blue-50/80 dark:bg-blue-950/40 border-blue-300 dark:border-blue-700 shadow-xs'
+                              : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700/80 hover:bg-slate-100 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block">Total</span>
+                          <span className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">{totalAdminSessionsCount}</span>
+                          <span className="text-[10px] text-slate-400 block mt-0.5">Todas las sesiones</span>
+                        </div>
 
-                  <div className="overflow-x-auto border rounded-2xl max-h-[450px]">
-                    <table className="w-full text-left text-sm">
-                      <thead className="bg-slate-50 text-xs uppercase font-bold border-b text-slate-600 sticky top-0">
-                        <tr><th className="p-3.5">Fecha y Hora</th><th className="p-3.5">Usuario</th><th className="p-3.5">Acción Registrada</th><th className="p-3.5">Detalles de Seguridad</th></tr>
-                      </thead>
-                      <tbody className="divide-y text-sm">
-                        {filteredAudits.map(a => (
-                          <tr key={a.id} className="hover:bg-slate-50/50">
-                            <td className="p-3.5 font-mono text-slate-600">{a.timestamp}</td>
-                            <td className="p-3.5 font-bold text-slate-900">{a.user}</td>
-                            <td className="p-3.5">
-                              <span className="px-2.5 py-1 bg-slate-100 text-slate-800 font-bold rounded-md uppercase text-xs">{a.action}</span>
-                            </td>
-                            <td className="p-3.5 text-slate-700">{a.details}</td>
-                          </tr>
-                        ))}
-                        {filteredAudits.length === 0 && (
-                          <tr><td colSpan="4" className="p-6 text-center text-slate-500 italic">No se encontraron eventos.</td></tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                        <div
+                          onClick={() => setAdminSessionsFilterStatus('confirmed')}
+                          className={`p-3.5 rounded-2xl border transition cursor-pointer ${
+                            adminSessionsFilterStatus === 'confirmed'
+                              ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700 shadow-xs'
+                              : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700/80 hover:bg-slate-100 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          <div className="flex items-center space-x-1.5">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                            <span className="text-[10px] uppercase font-bold text-emerald-700 dark:text-emerald-400">Aceptadas</span>
+                          </div>
+                          <span className="text-xl sm:text-2xl font-black text-emerald-700 dark:text-emerald-300">{confirmedAdminSessionsCount}</span>
+                          <span className="text-[10px] text-emerald-600/80 dark:text-emerald-400/70 block mt-0.5">En proceso</span>
+                        </div>
+
+                        <div
+                          onClick={() => setAdminSessionsFilterStatus('pending')}
+                          className={`p-3.5 rounded-2xl border transition cursor-pointer ${
+                            adminSessionsFilterStatus === 'pending'
+                              ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700 shadow-xs'
+                              : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700/80 hover:bg-slate-100 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          <div className="flex items-center space-x-1.5">
+                            <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                            <span className="text-[10px] uppercase font-bold text-amber-700 dark:text-amber-400">En Espera</span>
+                          </div>
+                          <span className="text-xl sm:text-2xl font-black text-amber-700 dark:text-amber-300">{pendingAdminSessionsCount}</span>
+                          <span className="text-[10px] text-amber-600/80 dark:text-amber-400/70 block mt-0.5">Por responder</span>
+                        </div>
+
+                        <div
+                          onClick={() => setAdminSessionsFilterStatus('completed')}
+                          className={`p-3.5 rounded-2xl border transition cursor-pointer ${
+                            adminSessionsFilterStatus === 'completed'
+                              ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-300 dark:border-blue-700 shadow-xs'
+                              : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700/80 hover:bg-slate-100 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          <div className="flex items-center space-x-1.5">
+                            <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                            <span className="text-[10px] uppercase font-bold text-blue-700 dark:text-blue-400">Completadas</span>
+                          </div>
+                          <span className="text-xl sm:text-2xl font-black text-blue-700 dark:text-blue-300">{completedAdminSessionsCount}</span>
+                          <span className="text-[10px] text-blue-600/80 dark:text-blue-400/70 block mt-0.5">Finalizadas</span>
+                        </div>
+
+                        <div
+                          onClick={() => setAdminSessionsFilterStatus('rejected')}
+                          className={`col-span-2 sm:col-span-1 p-3.5 rounded-2xl border transition cursor-pointer ${
+                            adminSessionsFilterStatus === 'rejected'
+                              ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-700 shadow-xs'
+                              : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700/80 hover:bg-slate-100 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          <div className="flex items-center space-x-1.5">
+                            <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+                            <span className="text-[10px] uppercase font-bold text-rose-700 dark:text-rose-400">Rechazadas</span>
+                          </div>
+                          <span className="text-xl sm:text-2xl font-black text-rose-700 dark:text-rose-300">{rejectedAdminSessionsCount}</span>
+                          <span className="text-[10px] text-rose-600/80 dark:text-rose-400/70 block mt-0.5">Canceladas</span>
+                        </div>
+                      </div>
+
+                      {/* FILTROS Y BÚSQUEDA */}
+                      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+                        {/* Buscador */}
+                        <div className="flex items-center space-x-2.5 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-2xl border border-slate-200 dark:border-slate-700 flex-1">
+                          <Search className="w-4.5 h-4.5 text-slate-400 shrink-0" />
+                          <input
+                            type="text"
+                            placeholder="Buscar por materia, estudiante, tutor, carrera, fecha..."
+                            value={adminSessionsSearchQuery}
+                            onChange={(e) => setAdminSessionsSearchQuery(e.target.value)}
+                            className="w-full bg-transparent text-xs sm:text-sm font-medium focus:outline-none text-slate-800 dark:text-slate-100"
+                          />
+                          {adminSessionsSearchQuery && (
+                            <button
+                              onClick={() => setAdminSessionsSearchQuery('')}
+                              className="text-xs font-bold text-slate-400 hover:text-slate-700 dark:hover:text-white"
+                            >
+                              Limpiar
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Botones de Filtro por Estado */}
+                        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
+                          {[
+                            { key: 'all', label: `Todas (${totalAdminSessionsCount})` },
+                            { key: 'confirmed', label: `Aceptadas (${confirmedAdminSessionsCount})` },
+                            { key: 'pending', label: `En Espera (${pendingAdminSessionsCount})` },
+                            { key: 'completed', label: `Completadas (${completedAdminSessionsCount})` },
+                            { key: 'rejected', label: `Rechazadas (${rejectedAdminSessionsCount})` }
+                          ].map(t => (
+                            <button
+                              key={t.key}
+                              type="button"
+                              onClick={() => setAdminSessionsFilterStatus(t.key)}
+                              className={`px-3 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+                                adminSessionsFilterStatus === t.key
+                                  ? 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 shadow-xs'
+                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                              }`}
+                            >
+                              {t.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Botón Descargar PDF */}
+                        <button
+                          type="button"
+                          onClick={() => exportSessionsAuditToPDF(filteredAdminSessions, currentUser?.name || 'Admin Global', primaryColor)}
+                          className="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold text-xs sm:text-sm rounded-xl flex items-center justify-center space-x-2 shadow-xs transition shrink-0 cursor-pointer"
+                          title="Descargar reporte oficial de tutorías en PDF"
+                        >
+                          <FileText className="w-4 h-4" />
+                          <span>Descargar PDF</span>
+                        </button>
+                      </div>
+
+                      {/* LISTADO DETALLADO DE TUTORÍAS */}
+                      {filteredAdminSessions.length > 0 ? (
+                        <div className="space-y-3.5 max-h-[620px] overflow-y-auto pr-1">
+                          {filteredAdminSessions.map(session => {
+                            const catalogMatch = catalogSubjects.find(cs => cs.name?.toLowerCase() === session.subject?.toLowerCase());
+                            const semesterNum = catalogMatch?.semester || 1;
+                            const careerName = catalogMatch?.career || getSessionCareer(session);
+
+                            const studentObj = users.find(u => u.id === session.studentId) || {
+                              name: session.studentName || 'Estudiante Interesado',
+                              email: 'No registrado',
+                              career: careerName,
+                              cedula: 'No especificada',
+                              phone: 'No registrado'
+                            };
+
+                            const tutorObj = users.find(u => u.id === session.tutorId) || {
+                              name: session.tutorName || 'Tutor Docente',
+                              email: 'contacto@iujo.edu.ve'
+                            };
+
+                            const isConfirmed = session.status === 'confirmed';
+                            const isPending = session.status === 'pending';
+                            const isCompleted = session.status === 'completed';
+                            const isRejected = session.status === 'rejected';
+
+                            return (
+                              <div
+                                key={session.id}
+                                className="p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 hover:bg-slate-50 dark:hover:bg-slate-800/70 transition space-y-3 shadow-2xs"
+                              >
+                                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2.5">
+                                  <div className="space-y-1">
+                                    <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                                      <h3 className="font-black text-base sm:text-lg text-slate-900 dark:text-white">
+                                        {session.subject}
+                                      </h3>
+                                      <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                                        Semestre {semesterNum}
+                                      </span>
+                                      <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-lg bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                        {careerName}
+                                      </span>
+                                    </div>
+
+                                    {session.description && (
+                                      <p className="text-xs text-slate-600 dark:text-slate-300 italic">
+                                        "{session.description}"
+                                      </p>
+                                    )}
+                                  </div>
+
+                                  {/* Badge de Estado */}
+                                  <div className="self-start sm:self-auto shrink-0">
+                                    {isConfirmed && (
+                                      <span className="px-3 py-1 rounded-xl text-xs font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center space-x-1.5">
+                                        <CheckCircle2 className="w-3.5 h-3.5" />
+                                        <span>Aceptada / En Proceso</span>
+                                      </span>
+                                    )}
+                                    {isPending && (
+                                      <span className="px-3 py-1 rounded-xl text-xs font-black uppercase tracking-wider bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800 flex items-center space-x-1.5">
+                                        <Clock3 className="w-3.5 h-3.5" />
+                                        <span>En Espera / Pendiente</span>
+                                      </span>
+                                    )}
+                                    {isCompleted && (
+                                      <span className="px-3 py-1 rounded-xl text-xs font-black uppercase tracking-wider bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800 flex items-center space-x-1.5">
+                                        <CheckCheck className="w-3.5 h-3.5" />
+                                        <span>Completada</span>
+                                      </span>
+                                    )}
+                                    {isRejected && (
+                                      <span className="px-3 py-1 rounded-xl text-xs font-black uppercase tracking-wider bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800 flex items-center space-x-1.5">
+                                        <XCircle className="w-3.5 h-3.5" />
+                                        <span>Rechazada / Cancelada</span>
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Cuadrícula con detalles: Estudiante, Tutor, Horario, Modalidad */}
+                                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-200/70 dark:border-slate-700/60 text-xs">
+                                  {/* Estudiante */}
+                                  <div className="bg-white dark:bg-slate-800/80 p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between">
+                                    <div className="flex items-center space-x-2 truncate">
+                                      <div className="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 flex items-center justify-center font-bold text-xs shrink-0">
+                                        {studentObj.name?.charAt(0) || 'E'}
+                                      </div>
+                                      <div className="truncate">
+                                        <span className="text-[10px] font-bold uppercase text-slate-400 block">Estudiante</span>
+                                        <span className="font-bold text-slate-800 dark:text-slate-100 truncate block">{studentObj.name}</span>
+                                      </div>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedStudentForInfo(studentObj)}
+                                      className="p-1 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition"
+                                      title="Ver ficha del estudiante"
+                                    >
+                                      <Info className="w-4 h-4" />
+                                    </button>
+                                  </div>
+
+                                  {/* Tutor */}
+                                  <div className="bg-white dark:bg-slate-800/80 p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-700/60 flex items-center space-x-2 truncate">
+                                    <div className="w-7 h-7 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 flex items-center justify-center font-bold text-xs shrink-0">
+                                      {tutorObj.name?.charAt(0) || 'T'}
+                                    </div>
+                                    <div className="truncate">
+                                      <span className="text-[10px] font-bold uppercase text-slate-400 block">Tutor Asignado</span>
+                                      <span className="font-bold text-slate-800 dark:text-slate-100 truncate block">{tutorObj.name}</span>
+                                    </div>
+                                  </div>
+
+                                  {/* Fecha y Hora */}
+                                  <div className="bg-white dark:bg-slate-800/80 p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-700/60 flex items-center space-x-2 truncate">
+                                    <Calendar className="w-4 h-4 text-amber-500 shrink-0" />
+                                    <div className="truncate">
+                                      <span className="text-[10px] font-bold uppercase text-slate-400 block">Fecha y Hora</span>
+                                      <span className="font-bold text-slate-800 dark:text-slate-100 truncate block">
+                                        {session.date || 'Por acordar'} {session.time ? `• ${session.time}` : ''}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Modalidad y Lugar */}
+                                  <div className="bg-white dark:bg-slate-800/80 p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-700/60 flex items-center space-x-2 truncate">
+                                    {session.modality === 'Virtual' ? (
+                                      <Video className="w-4 h-4 text-indigo-500 shrink-0" />
+                                    ) : (
+                                      <MapPin className="w-4 h-4 text-rose-500 shrink-0" />
+                                    )}
+                                    <div className="truncate">
+                                      <span className="text-[10px] font-bold uppercase text-slate-400 block">Modalidad</span>
+                                      <span className="font-bold text-slate-800 dark:text-slate-100 truncate block">
+                                        {session.modality || 'Presencial'} {session.location ? `(${session.location})` : ''}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="text-center py-12 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-800/20 space-y-2">
+                          <Calendar className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto" />
+                          <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                            No se encontraron tutorías con los filtros actuales
+                          </p>
+                          <p className="text-xs text-slate-400">
+                            Prueba a cambiar el filtro de estado o borrar el término de búsqueda.
+                          </p>
+                          {(adminSessionsFilterStatus !== 'all' || adminSessionsSearchQuery) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAdminSessionsFilterStatus('all');
+                                setAdminSessionsSearchQuery('');
+                              }}
+                              className="px-3.5 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 text-xs font-bold hover:bg-blue-100 dark:hover:bg-blue-900 transition mt-2 cursor-pointer"
+                            >
+                              Restablecer Filtros
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* VISTA 2: BITÁCORA DE SEGURIDAD */}
+                  {adminSecuritySubTab === 'audit_logs' && (
+                    <div className="space-y-4 pt-1">
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                        <div className="flex items-center space-x-2.5 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-2xl border border-slate-200 dark:border-slate-700 flex-1 w-full">
+                          <Filter className="w-4.5 h-4.5 text-slate-500 shrink-0" />
+                          <input
+                            type="text"
+                            placeholder="Filtrar por fecha, hora, usuario o acción..."
+                            value={auditFilterQuery}
+                            onChange={(e) => setAuditFilterQuery(e.target.value)}
+                            className="w-full bg-transparent text-xs sm:text-sm font-medium focus:outline-none text-slate-800 dark:text-slate-100"
+                          />
+                          {auditFilterQuery && (
+                            <button onClick={() => setAuditFilterQuery('')} className="text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-white">
+                              Limpiar
+                            </button>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => exportAuditsToPDF(filteredAudits, currentUser?.name || 'Admin Global', primaryColor)}
+                          className="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold text-xs sm:text-sm rounded-xl flex items-center justify-center space-x-2 shadow-xs transition shrink-0 cursor-pointer w-full sm:w-auto"
+                          title="Descargar bitácora de auditoría en formato PDF"
+                        >
+                          <FileText className="w-4 h-4" />
+                          <span>Descargar Bitácora PDF</span>
+                        </button>
+                      </div>
+
+                      <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-2xl max-h-[480px]">
+                        <table className="w-full text-left text-xs sm:text-sm">
+                          <thead className="bg-slate-50 dark:bg-slate-800 text-xs uppercase font-bold border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 sticky top-0">
+                            <tr>
+                              <th className="p-3.5">Fecha y Hora</th>
+                              <th className="p-3.5">Usuario</th>
+                              <th className="p-3.5">Acción Registrada</th>
+                              <th className="p-3.5">Detalles de Seguridad</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs sm:text-sm">
+                            {filteredAudits.map(a => (
+                              <tr key={a.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                                <td className="p-3.5 font-mono text-slate-600 dark:text-slate-400">{a.timestamp}</td>
+                                <td className="p-3.5 font-bold text-slate-900 dark:text-white">{a.user}</td>
+                                <td className="p-3.5">
+                                  <span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold rounded-md uppercase text-[10px] sm:text-xs">
+                                    {a.action}
+                                  </span>
+                                </td>
+                                <td className="p-3.5 text-slate-700 dark:text-slate-300">{a.details}</td>
+                              </tr>
+                            ))}
+                            {filteredAudits.length === 0 && (
+                              <tr>
+                                <td colSpan="4" className="p-6 text-center text-slate-500 italic">
+                                  No se encontraron eventos de seguridad registrados.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
